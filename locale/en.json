@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Rio terminal",
+    "description": "Open Rio read-only preview from the right sidebar’s new tab page to see output rendered by the bundled WebAssembly engine. No shell is started and the built-in terminal stays unchanged."
+  }
+}

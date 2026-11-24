@@ -9,8 +9,9 @@
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
     "noEmitOnError": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["node", "react"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "tsdown.config.ts"]
 }

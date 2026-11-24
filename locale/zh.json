@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Rio 终端",
+    "description": "在右侧栏的新建页打开「Rio 只读预览」，用随插件打包的 WebAssembly 引擎显示示例输出。不启动 shell，也不替换内置终端。"
+  }
+}

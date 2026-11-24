@@ -1,6 +1,6 @@
 # dsh-plugin-rioterm
 
-面向 DeepSeek Harness 的 Rio 终端插件。目前只有 TypeScript 工程骨架，尚不可作为 DSH 插件安装。
+面向 DeepSeek Harness 的 Rio WASM 预览插件。在右侧栏的新建页打开 Rio 预览，查看由本地 WASM 解析的就绪文字。此阶段不连接 shell，不读取会话内容，也不替换 DSH 的默认终端。
 
 ## 本地开发
 
@@ -10,9 +10,12 @@
 pnpm install --frozen-lockfile
 pnpm check
 pnpm build
+pnpm test
 ```
 
-`pnpm check` 检查格式、lint 和类型。`pnpm build` 将 `src/` 编译为 `dist/` 下的 ES 模块。
+`pnpm typecheck` 使用锁定版本的 tsrs，以 `--noEmit` 检查源码与构建配置。`pnpm check` 先运行 Biome，再运行相同的类型检查。`pnpm build` 用 tsdown 打包客户端，用 `tsc --noCheck`（通过 Host 配置）仅转译宿主入口，并把与 JS 版本匹配的独立 WASM 复制到 `lib/`。`pnpm test` 在构建后运行。
+
+本地预览时先构建，再到 DSH 的插件管理中添加当前仓库目录。在右侧栏的新建页选择「Rio 只读预览」。插件不依赖 CDN，也不需要放宽页面 CSP。若页面策略阻止 WASM 编译，应检查错误提示，而不是关闭安全策略。
 
 ## 变更集与发布
 
