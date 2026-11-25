@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Button } from '../../components/ui/button.tsx';
+import { Input } from '../../components/ui/input.tsx';
 import type {
   TerminalSearch as SearchEngine,
   TerminalSearchDirection,
@@ -259,11 +260,12 @@ function FindBar({
   return (
     <search
       aria-label={t('findOutput')}
-      className="rio:box-border rio:flex rio:w-[26rem] rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:p-2 rio:text-foreground rio:shadow-md"
+      className="rio:box-border rio:flex rio:w-96 rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:px-2 rio:py-1 rio:text-foreground rio:shadow-md"
     >
       <div className="rio:relative rio:min-w-0 rio:flex-1">
-        <input
+        <Input
           ref={input}
+          size="sm"
           type="text"
           aria-label={t('findOutput')}
           aria-describedby={statusId}
@@ -275,7 +277,7 @@ function FindBar({
           maxLength={1024}
           autoCapitalize="off"
           spellCheck={false}
-          className="rio:box-border rio:h-8 rio:w-full rio:min-w-0 rio:appearance-none rio:rounded-sm rio:border-0 rio:bg-muted rio:ps-2 rio:pe-[min(7rem,50%)] rio:text-sm rio:text-foreground rio:focus-visible:outline-1 rio:focus-visible:outline-solid rio:focus-visible:outline-ring rio:focus-visible:-outline-offset-1"
+          className="rio:border-0 rio:border-transparent rio:bg-muted rio:pe-[min(7rem,50%)]"
           onChange={(e) => setQuery(e.currentTarget.value)}
           onCompositionStart={() => setComposing(true)}
           onCompositionEnd={(e) => {

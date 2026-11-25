@@ -40,7 +40,7 @@ test('the client registers lazily under the published package name', async () =>
   const client = factory((name) => {
     assert.equal(name, 'react');
     requested.add(name);
-    return {};
+    return React; // Component definitions may use forwardRef; the factory still mounts nothing.
   });
   assert.deepEqual([...requested], ['react']);
   assert.equal(typeof client.apply, 'function');

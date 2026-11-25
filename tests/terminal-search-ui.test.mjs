@@ -299,8 +299,8 @@ test('waiting and pending feedback share a fixed input inset without moving the 
   const field = p.input();
   const slot = feedback();
   const next = p.button('findNext');
-  assert.equal(hasClass(field.parent, 'rio:relative'), true);
-  assert.equal(slot.parent, field.parent);
+  assert.equal(hasClass(slot.parent, 'rio:relative'), true);
+  assert.equal(slot.parent.findByType('input'), field);
   for (const className of [
     'rio:pointer-events-none',
     'rio:absolute',

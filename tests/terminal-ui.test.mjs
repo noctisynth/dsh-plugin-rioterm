@@ -113,6 +113,10 @@ test('search uses one themed outer boundary while its input and actions stay bor
       'rio:border-border',
       'rio:bg-background',
       'rio:shadow-md',
+      'rio:w-96',
+      'rio:max-w-full',
+      'rio:px-2',
+      'rio:py-1',
     ]) {
       assert.ok(frame.props.className.split(' ').includes(token), token);
       assertCompiled(token);
@@ -125,6 +129,22 @@ test('search uses one themed outer boundary while its input and actions stay bor
       assert.ok(classes.includes('rio:border-0'));
       assert.ok(!classes.includes('rio:border-border'));
     }
+    const input = tree.root.findByType('input');
+    assert.equal(input.props['data-slot'], 'input');
+    assert.equal(
+      input.props.size,
+      undefined,
+      'component size is not a native character width',
+    );
+    const inputClasses = input.props.className.split(' ');
+    for (const token of ['rio:h-7', 'rio:text-xs']) {
+      assert.ok(inputClasses.includes(token), token);
+      assertCompiled(token);
+    }
+    assert.ok(!inputClasses.includes('rio:h-8'));
+    assert.ok(!inputClasses.includes('rio:text-sm'));
+    for (const button of frame.findAllByType('button'))
+      assert.ok(button.props.className.split(' ').includes('rio:size-8'));
     assert.match(css, /--dsw-alias-border-l2/);
   } finally {
     TestRenderer.act(() => tree.unmount());
