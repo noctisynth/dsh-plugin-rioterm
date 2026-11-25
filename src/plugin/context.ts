@@ -7,6 +7,7 @@ import type { PreferenceConfigForms } from './preferences.ts';
 // bundle a second DSH client or pass the application context to a page.
 type Dispose = () => void;
 export interface SidebarTab {
+  id: string;
   title: string;
   contentId: string;
   visible: boolean;
@@ -66,6 +67,7 @@ export interface ClientContext {
     }): Dispose;
   };
   sidebarRight: {
+    active(): { id: string } | undefined;
     openTabs: {
       getSnapshot(): readonly {
         sessionId: string;

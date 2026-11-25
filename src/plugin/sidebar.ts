@@ -101,6 +101,8 @@ export function registerTerminalSidebar(
             inject: (sessionId) => ({
               issueLaunch: () => sessions.issue(sessionId),
               appearance,
+              isActiveTab: (tabId: string) =>
+                ctx.sidebarRight.active()?.id === tabId,
               session: (contentId: string) =>
                 sessions.get(sessionId, contentId),
             }),

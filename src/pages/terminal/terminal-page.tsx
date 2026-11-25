@@ -10,6 +10,7 @@ interface TerminalPageProps {
   appearance: Observable<EffectiveRioPreferences>;
   session: TerminalSession;
   visible: boolean;
+  active: boolean;
   launchTicket: string | undefined;
   issueLaunch: () => string;
   openNew: () => void;
@@ -20,6 +21,7 @@ export function TerminalPage({
   appearance,
   session,
   visible,
+  active,
   launchTicket,
   issueLaunch,
   openNew,
@@ -30,6 +32,7 @@ export function TerminalPage({
     appearance,
     session,
     visible,
+    active,
     ticket: requested ?? launchTicket,
     inputLabel: t('input'),
     linkPrompt: t('openLink'),

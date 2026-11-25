@@ -38,6 +38,65 @@ export class RioTextInput {
   }
 }
 
+const hiddenAncestor = '[inert], [hidden], [aria-hidden="true"]';
+
+// Watch only while an activation is waiting for the engine/shell. The old focus
+// owner (even a composer) is not itself a veto; a subsequent gesture is.
+export function beginAutoFocus(
+  container: HTMLElement,
+): AbortController | undefined {
+  const doc = container.ownerDocument;
+  if (doc.hidden || !doc.hasFocus() || container.closest(hiddenAncestor))
+    return;
+  const request = new AbortController();
+  const cancel = () => request.abort();
+  const events = { capture: true, signal: request.signal };
+  doc.addEventListener('input', cancel, events);
+  doc.addEventListener('visibilitychange', cancel, events);
+  doc.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!container.contains(event.target as Node)) cancel();
+    },
+    events,
+  );
+  const selectedTab = '[role="tab"][aria-selected="true"]';
+  doc.addEventListener(
+    'keydown',
+    (event) => {
+      const target = event.target as Element | null;
+      // Typing into the not-yet-ready tab does not revoke it (or buffer keys).
+      // Typing in the old composer, or navigating elsewhere, does.
+      const atTerminal =
+        target === doc.body ||
+        target?.contains(container) ||
+        target?.matches?.(selectedTab) ||
+        container.contains(target);
+      if (!atTerminal || event.key === 'Tab' || event.key === 'Escape')
+        cancel();
+    },
+    events,
+  );
+  let activating = true;
+  queueMicrotask(() => {
+    activating = false;
+  });
+  doc.addEventListener(
+    'focusin',
+    (event) => {
+      // DockKit hands focus to a selected tab chip during the activation commit,
+      // or to the surrounding pane after it. Neither is a new editing gesture.
+      const target = event.target as Element | null;
+      if (target?.contains(container)) return;
+      if (activating && target?.matches?.(selectedTab)) return;
+      cancel();
+    },
+    events,
+  );
+  doc.defaultView?.addEventListener('blur', cancel, { signal: request.signal });
+  return request;
+}
+
 export function bindKeyboardInput(
   root: HTMLElement,
   core: RioTerminal,
@@ -47,7 +106,6 @@ export function bindKeyboardInput(
   >,
   label: string,
   signal: AbortSignal,
-  autoFocus = false,
 ) {
   const editing = new RioTextInput();
   const input = root.ownerDocument.createElement('textarea');
@@ -63,23 +121,6 @@ export function bindKeyboardInput(
   root.append(input);
   const events = { signal };
   const doc = root.ownerDocument;
-  const vacant = () => !doc.activeElement || doc.activeElement === doc.body;
-  let initialFocus = autoFocus && vacant();
-  const cancelAutoFocus = () => {
-    initialFocus = false;
-  };
-  if (initialFocus) {
-    // A pending WASM/snapshot mount must not steal focus back from Settings or another tab.
-    doc.addEventListener('focusin', cancelAutoFocus, {
-      ...events,
-      capture: true,
-      once: true,
-    });
-    doc.defaultView?.addEventListener('blur', cancelAutoFocus, {
-      ...events,
-      once: true,
-    });
-  }
   const reset = () => {
     editing.reset();
     input.value = '';
@@ -216,17 +257,14 @@ export function bindKeyboardInput(
   return {
     reset,
     positionComposition,
-    cancelAutoFocus,
-    offerAutoFocus() {
-      if (!initialFocus || !core.interactive) return;
-      cancelAutoFocus();
+    focusIfInteractive() {
       if (
+        core.interactive &&
         !signal.aborted &&
-        vacant() &&
         doc.hasFocus() &&
         !doc.hidden &&
         root.getClientRects().length &&
-        !root.closest('[inert], [hidden], [aria-hidden="true"]')
+        !root.closest(hiddenAncestor)
       ) {
         input.focus({ preventScroll: true });
       }

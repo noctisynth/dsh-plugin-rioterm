@@ -19,6 +19,7 @@ interface GuideSlotProps extends TabSlotProps {
   description?: string;
 }
 interface PageSlotProps extends TabSlotProps {
+  isActiveTab(id: string): boolean;
   appearance: Observable<EffectiveRioPreferences>;
   t: TerminalTranslate;
   session(contentId: string): TerminalSession;
@@ -51,6 +52,7 @@ export function TitleSlot({ useTabInfo }: Pick<TabSlotProps, 'useTabInfo'>) {
 
 export function PageSlot({
   useTabInfo,
+  isActiveTab,
   issueLaunch,
   t,
   session,
@@ -62,6 +64,8 @@ export function PageSlot({
     session: session(tab.contentId),
     appearance,
     visible: tab.visible,
+    // Split and floating panes can be visible together; only the selected one gets focus.
+    active: tab.visible && isActiveTab(tab.id),
     launchTicket: tab.navigation.params?.rioLaunch,
     issueLaunch,
     openNew: () => openNew(tab, issueLaunch),

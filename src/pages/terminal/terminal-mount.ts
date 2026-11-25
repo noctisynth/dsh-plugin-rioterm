@@ -17,7 +17,8 @@ export interface TerminalViewState {
 interface ViewOptions {
   session: TerminalSession;
   ticket: string | undefined;
-  isVisible: () => boolean;
+  tabState: () => { visible: boolean; active: boolean };
+  beginAutoFocus: () => AbortController | undefined;
   loadEngine: (reload: boolean) => Promise<void>;
   createScreen: (
     limits: TerminalLimits,
@@ -29,22 +30,61 @@ interface ViewOptions {
 export interface TerminalViewMount {
   retry(focusInput?: boolean): void;
   setPreferences(preferences: EffectiveRioPreferences): void;
-  setVisible(visible: boolean): void;
+  syncTabState(): void;
   dispose(): void;
 }
 
 export function mountTerminalView(options: ViewOptions): TerminalViewMount {
   let status: TerminalViewState['status'] | undefined;
+  let pending: AbortController | undefined;
+  let foreground = false;
+  let { visible } = options.tabState();
+  function cancelFocus() {
+    pending?.abort();
+    pending = undefined;
+  }
+  function offerFocus() {
+    const request = pending;
+    if (!request) return;
+    // The sidebar may focus its pane after the activation commit. Finish after
+    // that handoff, not in a later animation frame or on the next PTY output.
+    queueMicrotask(() => {
+      if (pending !== request) return;
+      const { active, visible } = options.tabState();
+      const allowed = active && visible && !request.signal.aborted;
+      cancelFocus();
+      if (allowed) attempt?.focusIfInteractive();
+    });
+  }
   const start = (reload: boolean) =>
     startAttempt(options, reload, (state) => {
       status = state.status;
+      if (status === 'connected') offerFocus();
+      else if (status !== 'opening' && status !== 'loading') cancelFocus();
       options.onState(state);
     });
   let attempt = start(false);
+  function syncTabState() {
+    const next = options.tabState();
+    if (visible !== next.visible) attempt?.setVisible(next.visible);
+    visible = next.visible;
+    const selected = visible && next.active;
+    if (foreground === selected) return;
+    foreground = selected;
+    cancelFocus();
+    if (
+      selected &&
+      (status === 'loading' || status === 'opening' || status === 'connected')
+    ) {
+      pending = options.beginAutoFocus();
+      if (status === 'connected') offerFocus();
+    }
+  }
+  syncTabState();
   return {
     retry(focusInput = false) {
       // An old button event must not reopen an exited shell or take control from a hidden tab.
-      if (!options.isVisible()) return;
+      if (!options.tabState().visible) return;
       if (
         status !== 'readonly' &&
         status !== 'disconnected' &&
@@ -56,9 +96,13 @@ export function mountTerminalView(options: ViewOptions): TerminalViewMount {
       attempt?.dispose();
       attempt = start(true);
     },
-    setPreferences: (preferences) => attempt?.setPreferences(preferences),
-    setVisible: (visible) => attempt?.setVisible(visible),
+    setPreferences(preferences) {
+      if (!preferences.autoFocus) cancelFocus();
+      attempt?.setPreferences(preferences);
+    },
+    syncTabState,
     dispose() {
+      cancelFocus();
       attempt?.dispose();
       attempt = undefined;
       status = undefined;
@@ -68,11 +112,13 @@ export function mountTerminalView(options: ViewOptions): TerminalViewMount {
 
 /** One preflight and screen. Dispose fences *all* callbacks before another attempt can start. */
 function startAttempt(
-  { session, ticket, isVisible, loadEngine, createScreen }: ViewOptions,
+  { session, ticket, tabState, loadEngine, createScreen }: ViewOptions,
   reload: boolean,
   onState: ViewOptions['onState'],
 ):
-  | (Omit<TerminalViewMount, 'retry'> & {
+  | (Pick<TerminalViewMount, 'setPreferences' | 'dispose'> & {
+      setVisible(visible: boolean): void;
+      focusIfInteractive(): void;
       reconnect(focusInput: boolean): boolean;
     })
   | undefined {
@@ -108,13 +154,13 @@ function startAttempt(
         input: (data, typed) => attachment?.input(data, typed),
         resize: (cols, rows) => attachment?.resize(cols, rows),
       });
-      screen.setVisible(isVisible());
+      const { visible } = tabState();
+      screen.setVisible(visible);
       attachment = session.mount(ticket, limits, {
-        visible: isVisible(),
+        visible,
         screen,
         status(status, detail) {
           if (!mounted) return;
-          if (status === 'reconnecting') screen?.cancelAutoFocus();
           onState(detail ? { status, detail } : { status });
         },
       });
@@ -129,6 +175,7 @@ function startAttempt(
     });
 
   return {
+    focusIfInteractive: () => screen?.focusIfInteractive(),
     reconnect(focusInput) {
       if (!attachment?.reconnect()) return false;
       // Transfer focus during the click, never when a late snapshot arrives.

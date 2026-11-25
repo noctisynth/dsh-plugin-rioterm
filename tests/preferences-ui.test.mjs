@@ -456,7 +456,8 @@ test('Canvas-only controls follow the draft renderer and echo; hiding them does 
   view.blur('latencyThreshold');
   await settled();
   view.input('predictionStyle', 'dim');
-  view.toggle('autoFocus', true);
+  assert.equal(view.field('autoFocus').props.checked, true);
+  view.toggle('autoFocus', false);
   view.toggle('fit', false);
   view.input('renderer', 'dom');
   assert.deepEqual(view.byName('predictionStyle'), []);
@@ -467,7 +468,7 @@ test('Canvas-only controls follow the draft renderer and echo; hiding them does 
     predictiveEcho: true,
     latencyThreshold: 0,
     predictionStyle: 'dim',
-    autoFocus: true,
+    autoFocus: false,
     fit: false,
   });
   view.input('renderer', 'canvas');

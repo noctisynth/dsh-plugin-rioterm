@@ -37,7 +37,7 @@ test('the Cordis Config exposes every preference as a serializable, volatile fie
     renderer: 'canvas',
     altIsMeta: false,
     detectUrls: false,
-    autoFocus: true,
+    autoFocus: false,
     fit: false,
     predictiveEcho: true,
     latencyThreshold: 0,

@@ -167,6 +167,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
       },
     },
     sidebarRight: {
+      active: () => ({ id: 'focused-occurrence' }),
       registerCloseHandler: (kind) => {
         closeHandlers.push(kind);
         return noop;
@@ -352,13 +353,23 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     // The sidebar owns tab identity/navigation; pages see only a session and actions.
     const body = slots.get('sidebar.right.pane.tab');
     const services = body.def.inject('s');
-    const page = body.render({
-      ...services,
-      t: (key) => key,
-      useTabInfo: () => ({
-        tab: { contentId: 'rio-1', visible: false, navigation: opts },
-      }),
-    });
+    const renderOccurrence = (id, visible) =>
+      body.render({
+        ...services,
+        t: (key) => key,
+        useTabInfo: () => ({
+          tab: { id, contentId: 'rio-1', visible, navigation: opts },
+        }),
+      });
+    const page = renderOccurrence('focused-occurrence', false);
+    assert.equal(page.props.active, false);
+    const splitSibling = renderOccurrence('another-occurrence', true);
+    assert.equal(splitSibling.props.visible, true);
+    assert.equal(splitSibling.props.active, false);
+    assert.equal(
+      renderOccurrence('focused-occurrence', true).props.active,
+      true,
+    );
     assert.equal(page.key, 'rio-1');
     assert.equal(page.props.launchTicket, opts.params.rioLaunch);
     assert.equal(page.props.visible, false);

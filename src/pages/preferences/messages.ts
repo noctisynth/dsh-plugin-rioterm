@@ -39,9 +39,9 @@ const en = {
   fit: 'Fit the grid to the panel',
   fitHint:
     'While visible and in control, request a grid size that fits the panel. Turn off to keep the host grid size.',
-  autoFocus: 'Focus the terminal on first display',
+  autoFocus: 'Focus the terminal when opening or switching to its tab',
   focusHint:
-    'Focus only when first shown with input control. Changing this setting does not move focus in an open view.',
+    'Type immediately when the selected terminal is ready for input. Changing this setting does not move focus.',
   rendering: 'Rendering',
   renderer: 'Renderer',
   rendererHint:
@@ -192,9 +192,8 @@ const zh = {
   fit: '网格适应面板大小',
   fitHint:
     '当终端可见且持有输入权时，请求与面板匹配的行列数。关闭后保留宿主网格大小。',
-  autoFocus: '首次显示时聚焦终端',
-  focusHint:
-    '仅在首次显示并取得输入权时聚焦。更改此项不会抢占已打开画面的焦点。',
+  autoFocus: '打开或切回标签时聚焦终端',
+  focusHint: '选中的终端就绪后即可直接输入。更改此设置不会移动当前焦点。',
   rendering: '渲染',
   renderer: '渲染器',
   rendererHint: '光标形状与本地预测回显仅在 Canvas 下可用。',

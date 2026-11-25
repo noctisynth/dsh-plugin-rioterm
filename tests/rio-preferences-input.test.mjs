@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { before, test } from 'node:test';
 import { initWasm } from 'rioterm';
 import { defaultEffectivePreferences as defaults } from '../src/preferences/values.ts';
-import { bindKeyboardInput } from '../src/rio/keyboard-input.ts';
+import {
+  beginAutoFocus,
+  bindKeyboardInput,
+} from '../src/rio/keyboard-input.ts';
 import { bindPointerInput } from '../src/rio/pointer-input.ts';
 import { RioTerminal } from '../src/rio/terminal.ts';
 
@@ -226,7 +229,7 @@ test('drags, cancelled modifiers, stale/changed targets and points outside the v
   assert.deepEqual(opened, []);
 });
 
-function keyboardFixture(t, { autoFocus = true, occupied = false } = {}) {
+function keyboardFixture(t) {
   const { core, writes } = coreFor(t, {
     ...defaults,
     renderer: 'canvas',
@@ -255,10 +258,13 @@ function keyboardFixture(t, { autoFocus = true, occupied = false } = {}) {
     hidden: false,
     createElement: () => input,
   };
-  doc.activeElement = occupied ? {} : doc.body;
+  doc.activeElement = { tagName: 'TEXTAREA' }; // The previous composer still owns focus.
   const root = {
     ownerDocument: doc,
     append() {},
+    contains(element) {
+      return element === this;
+    },
     getClientRects: () => [{}],
     closest: () => null,
     removeAttribute() {},
@@ -278,13 +284,13 @@ function keyboardFixture(t, { autoFocus = true, occupied = false } = {}) {
     () => view,
     'input',
     lifetime.signal,
-    autoFocus,
   );
   return {
     core,
     writes,
     input,
     doc,
+    root,
     view,
     keyboard,
     predicted,
@@ -294,38 +300,77 @@ function keyboardFixture(t, { autoFocus = true, occupied = false } = {}) {
   };
 }
 
-test('initial focus is offered only once to a visible writer with vacant focus; later settings/ownership cannot steal it', (t) => {
-  const { core, keyboard, focuses, doc } = keyboardFixture(t);
-  keyboard.offerAutoFocus();
-  assert.equal(focuses(), 0);
-  core.writable = true;
-  core.visible = false;
-  keyboard.offerAutoFocus();
-  assert.equal(focuses(), 0);
-  core.visible = true;
-  keyboard.offerAutoFocus();
-  assert.equal(focuses(), 1);
-  doc.activeElement = doc.body;
-  keyboard.offerAutoFocus();
-  assert.equal(focuses(), 1);
-  for (const mode of [
-    'disabled',
-    'cancelled',
-    'other input',
-    'focus moved away and back',
+test('a keyboard activation may leave the composer focused; later interaction cancels even without changing activeElement', async (t) => {
+  const { root, doc } = keyboardFixture(t);
+  for (const event of [
+    'focusin',
+    'keydown',
+    'input',
+    'pointerdown',
     'window blur',
+    'visibilitychange',
   ]) {
-    const f = keyboardFixture(t, {
-      autoFocus: mode !== 'disabled',
-      occupied: mode === 'other input',
-    });
-    if (mode === 'cancelled') f.keyboard.cancelAutoFocus();
-    if (mode === 'focus moved away and back') f.doc.fire('focusin');
-    if (mode === 'window blur') f.doc.defaultView.fire('blur');
-    f.doc.activeElement = f.doc.body;
-    f.core.writable = true;
-    f.keyboard.offerAutoFocus();
-    assert.equal(f.focuses(), 0, mode);
+    const request = beginAutoFocus(root);
+    doc.fire('focusin', {
+      target: { contains: (element) => element === root },
+    }); // Host handoff to our pane.
+    assert.equal(request.signal.aborted, false);
+    if (event === 'window blur') doc.defaultView.fire('blur');
+    else doc.fire(event, { key: 'x', target: { contains: () => false } });
+    assert.equal(request.signal.aborted, true, event);
+  }
+  const chip = {
+    contains: () => false,
+    matches: (selector) => selector === '[role="tab"][aria-selected="true"]',
+  };
+  const request = beginAutoFocus(root);
+  doc.fire('focusin', { target: chip }); // DockKit selects and focuses the chip in one commit.
+  assert.equal(request.signal.aborted, false);
+  doc.fire('keydown', { target: chip, key: 'x' });
+  doc.fire('pointerdown', { target: root });
+  doc.fire('keydown', {
+    target: { contains: (node) => node === root },
+    key: 'a',
+  });
+  assert.equal(request.signal.aborted, false);
+  await Promise.resolve();
+  doc.fire('focusin', { target: chip });
+  assert.equal(request.signal.aborted, true);
+  const navigating = beginAutoFocus(root);
+  doc.fire('keydown', { target: chip, key: 'Tab' });
+  assert.equal(navigating.signal.aborted, true);
+  doc.hidden = true;
+  assert.equal(beginAutoFocus(root), undefined);
+  doc.hidden = false;
+  doc.hasFocus = () => false;
+  assert.equal(beginAutoFocus(root), undefined);
+});
+
+test('automatic focus requires a visible foreground writer; explicit focus still works on takeover', (t) => {
+  for (const blocked of [
+    'readonly',
+    'hidden tab',
+    'background window',
+    'hidden document',
+    'no box',
+    'inert ancestor',
+    'disposed',
+    'none',
+  ]) {
+    const { root, core, keyboard, focuses, doc, lifetime } = keyboardFixture(t);
+    core.writable = blocked !== 'readonly';
+    core.visible = blocked !== 'hidden tab';
+    doc.hidden = blocked === 'hidden document';
+    doc.hasFocus = () => blocked !== 'background window';
+    root.getClientRects = () => (blocked === 'no box' ? [] : [{}]);
+    root.closest = () => (blocked === 'inert ancestor' ? {} : null);
+    if (blocked === 'disposed') lifetime.abort();
+    keyboard.focusIfInteractive();
+    assert.equal(focuses(), Number(blocked === 'none'), blocked);
+    if (blocked === 'readonly') {
+      keyboard.focus();
+      assert.equal(focuses(), 1);
+    }
   }
 });
 

@@ -70,7 +70,7 @@ export const preferenceDefaults: RioPreferenceValues = {
   paddingLeft: 8,
   scrollback: -1,
   altIsMeta: true,
-  autoFocus: false,
+  autoFocus: true,
   fit: true,
   detectUrls: true,
   foreground: '',

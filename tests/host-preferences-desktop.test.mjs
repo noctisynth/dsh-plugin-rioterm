@@ -71,11 +71,13 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   assert.equal(first.applies, 'live');
   assert.deepEqual(first.value, preferenceDefaults);
   assert.deepEqual(first.user, {});
+  assert.equal(first.value.autoFocus, true);
   const form = new z(JSON.parse(JSON.stringify(first.schema)));
   assert.deepEqual(form({}), preferenceDefaults); // Client wire projection contains plain values, not Volatile refs.
   await root.settings.mutate(
     ns,
     [
+      { op: 'set', path: ['autoFocus'], value: false },
       { op: 'set', path: ['ansiPreset'], value: 'dsh' },
       { op: 'set', path: ['fontSize'], value: 17 },
       { op: 'set', path: ['scrollback'], value: 0 },
@@ -87,7 +89,9 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   const saved = describe();
   assert.ok(saved.revision > first.revision);
   assert.ok(events.some(([id, rev]) => id === ns && rev === saved.revision));
+  assert.equal(saved.value.autoFocus, false);
   assert.deepEqual(persisted, {
+    autoFocus: false,
     ansiPreset: 'dsh',
     fontSize: 17,
     scrollback: 0,
@@ -121,12 +125,14 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
     ns,
     [
       { op: 'unset', path: ['fontSize'] },
+      { op: 'unset', path: ['autoFocus'] },
       { op: 'unset', path: ['paddingTop'] },
       { op: 'unset', path: ['ansiPreset'] },
     ],
     saved.revision,
   );
   assert.deepEqual(persisted, { scrollback: 0, paddingRight: 64 });
+  assert.equal(describe().value.autoFocus, true);
   assert.equal(describe().value.ansiPreset, 'rio');
   assert.equal(describe().value.paddingTop, 16);
   assert.equal(ref.get(), 0);

@@ -11,7 +11,7 @@ import { RioViewport } from './viewport.ts';
 
 export interface RioScreen extends TerminalFrameSink {
   focus(): void;
-  cancelAutoFocus(): void;
+  focusIfInteractive(): void;
   setVisible(visible: boolean): void;
   setPreferences(preferences: EffectiveRioPreferences): void;
   dispose(): void;
@@ -63,7 +63,6 @@ export function createRioScreen(
     currentRenderer,
     options.label ?? 'Rio terminal',
     signal,
-    preferences.autoFocus,
   );
   const pointer = bindPointerInput(
     root,
@@ -112,7 +111,7 @@ export function createRioScreen(
   let detectUrls = preferences.detectUrls;
   return {
     focus: keyboard.focus,
-    cancelAutoFocus: keyboard.cancelAutoFocus,
+    focusIfInteractive: keyboard.focusIfInteractive,
     snapshot(cols, rows, data) {
       if (signal.aborted) return;
       keyboard.reset();
@@ -124,7 +123,6 @@ export function createRioScreen(
     resize: (cols, rows) => core.resize(cols, rows),
     setPreferences(next) {
       if (signal.aborted) return;
-      if (!next.autoFocus) keyboard.cancelAutoFocus();
       if (!next.fit) cancelFit();
       if (detectUrls !== next.detectUrls) pointer.clearLinks();
       detectUrls = next.detectUrls;
@@ -134,19 +132,15 @@ export function createRioScreen(
       if (signal.aborted || writable === core.writable) return;
       core.writable = writable;
       keyboard.setWritable(writable);
-      if (writable) {
-        fit();
-        keyboard.offerAutoFocus();
-      } else cancelFit();
+      if (writable) fit();
+      else cancelFit();
     },
     setVisible(visible) {
       if (signal.aborted) return;
       core.visible = visible;
       root.hidden = !visible;
-      if (visible) {
-        fit();
-        keyboard.offerAutoFocus();
-      } else {
+      if (visible) fit();
+      else {
         cancelFit();
         pointer.reset();
         keyboard.blur();

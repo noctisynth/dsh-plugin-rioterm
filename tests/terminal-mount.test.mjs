@@ -5,16 +5,24 @@ import { mountTerminalView } from '../src/pages/terminal/terminal-mount.ts';
 import { ResourceError } from '../src/rio/wasm-loader.ts';
 
 // Exercise the same page lifecycle with deferred ports, not a mock React renderer or a real PTY.
-function fixture({ knownIdentity = true } = {}) {
+function fixture({ knownIdentity = true, autoFocus = true } = {}) {
   const events = [];
   const engine = Promise.withResolvers();
   const environment = Promise.withResolvers();
-  let visible = true;
+  const tab = { visible: true, active: true };
+  const requests = [];
+  const preferences = { autoFocus };
   let bindings;
   let panel;
   const options = {
     ticket: 'launch-once',
-    isVisible: () => visible,
+    tabState: () => tab,
+    beginAutoFocus() {
+      if (!preferences.autoFocus) return;
+      const request = new AbortController();
+      requests.push(request);
+      return request;
+    },
     onState: (state) => events.push(['state', state]),
     loadEngine: () => {
       events.push('load');
@@ -48,7 +56,7 @@ function fixture({ knownIdentity = true } = {}) {
       events.push(['screen', limits]);
       return {
         focus: () => events.push('focus'),
-        cancelAutoFocus: () => events.push('cancel autofocus'),
+        focusIfInteractive: () => events.push('autofocus'),
         setVisible: (value) => events.push(['screen visible', value]),
         setPreferences: (value) => events.push(['render preferences', value]),
         dispose: () => events.push('dispose'),
@@ -66,9 +74,9 @@ function fixture({ knownIdentity = true } = {}) {
     get panel() {
       return panel;
     },
-    hide() {
-      visible = false;
-    },
+    tab,
+    preferences,
+    requests,
   };
 }
 
@@ -111,8 +119,8 @@ test('one mount forwards visibility and input only to its attachment and release
     maxBufferedBytes: 512,
     scrollback: 100,
   };
-  f.hide();
-  view.setVisible(false);
+  f.tab.visible = false;
+  view.syncTabState();
   f.engine.resolve();
   f.environment.resolve(limits);
   await setImmediate();
@@ -128,7 +136,8 @@ test('one mount forwards visibility and input only to its attachment and release
   assert.deepEqual(f.events.splice(0), [
     ['render preferences', { fontSize: 18 }],
   ]);
-  view.setVisible(true);
+  f.tab.visible = true;
+  view.syncTabState();
   f.panel.status('connected');
   f.input.input('你', true);
   f.input.resize(90, 30);
@@ -143,13 +152,138 @@ test('one mount forwards visibility and input only to its attachment and release
   view.dispose();
   f.panel.status('failed');
   f.input.input('stale', true);
-  view.setVisible(true);
+  f.tab.visible = true;
+  view.syncTabState();
   assert.deepEqual(f.events, [
     'detach',
     ['screen visible', false],
     'dispose',
     'aborted',
   ]);
+});
+
+test('open and each actual selection focus once after the host pane handoff, including switches between visible splits', async () => {
+  const f = fixture();
+  const view = mountTerminalView(f.options);
+  const count = () => f.events.filter((e) => e === 'autofocus').length;
+  assert.equal(f.requests.length, 1); // Already listening, even before WASM.
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  f.panel.status('opening');
+  assert.equal(count(), 0);
+  f.panel.status('connected');
+  assert.equal(count(), 0); // DSH can focus its pane after committing the active tab.
+  await Promise.resolve();
+  assert.equal(count(), 1);
+  assert.equal(f.requests[0].signal.aborted, true); // No permanent document listeners.
+  for (const field of ['active', 'visible']) {
+    f.tab[field] = false;
+    view.syncTabState();
+    f.tab[field] = true;
+    view.syncTabState();
+    view.syncTabState();
+    view.setPreferences({ autoFocus: true, fontSize: 15 });
+    f.panel.status('connected'); // Another state frame is not an activation.
+    await Promise.resolve();
+  }
+  assert.equal(count(), 3);
+  assert.equal(f.requests.length, 3);
+  assert.deepEqual(
+    f.events.filter((e) => e[0] === 'attachment visible'),
+    [
+      ['attachment visible', false],
+      ['attachment visible', true],
+    ],
+  ); // Merely selecting another split leaves this PTY visible.
+  f.panel.status('reconnecting');
+  f.panel.status('connected');
+  await Promise.resolve();
+  assert.equal(count(), 3);
+  view.dispose();
+});
+
+test('an interrupted activation never claims a later shell or reconnect, even on duplicate visible notifications', async () => {
+  for (const mode of [
+    'pre-WASM interaction',
+    'snapshot wait interaction',
+    'hidden',
+    'unselected split',
+    'disabled then enabled',
+    'reconnecting',
+    'readonly',
+    'disposed',
+  ]) {
+    const f = fixture();
+    const view = mountTerminalView(f.options);
+    if (mode === 'pre-WASM interaction') f.requests[0].abort();
+    f.engine.resolve();
+    f.environment.resolve({});
+    await setImmediate();
+    if (mode === 'snapshot wait interaction') f.requests[0].abort();
+    if (mode === 'hidden') f.tab.visible = false;
+    if (mode === 'unselected split') f.tab.active = false;
+    if (mode === 'disabled then enabled') {
+      view.setPreferences({ autoFocus: false });
+      view.setPreferences({ autoFocus: true });
+    }
+    if (mode === 'reconnecting' || mode === 'readonly') f.panel.status(mode);
+    if (mode === 'disposed') view.dispose();
+    view.syncTabState();
+    view.syncTabState();
+    f.panel.status('connected');
+    await Promise.resolve();
+    assert.equal(f.events.includes('autofocus'), false, mode);
+    assert.equal(f.requests.length, 1, mode);
+    assert.equal(f.requests[0].signal.aborted, true, mode);
+    view.dispose();
+  }
+});
+
+test('leaving a connected tab before the queued handoff cannot focus it or consume the next activation', async () => {
+  const f = fixture();
+  const view = mountTerminalView(f.options);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  f.panel.status('connected');
+  f.tab.active = false;
+  view.syncTabState();
+  await Promise.resolve();
+  assert.equal(f.events.includes('autofocus'), false);
+  f.tab.active = true;
+  view.syncTabState();
+  f.tab.active = false;
+  view.syncTabState();
+  f.tab.active = true;
+  view.syncTabState();
+  await Promise.resolve();
+  assert.equal(f.events.filter((e) => e === 'autofocus').length, 1);
+  view.dispose();
+});
+
+test('enabling autofocus or restoring a background split waits for a new selection', async () => {
+  for (const initiallyActive of [false, true]) {
+    const f = fixture({ autoFocus: !initiallyActive });
+    f.tab.active = initiallyActive;
+    const view = mountTerminalView(f.options);
+    f.engine.resolve();
+    f.environment.resolve({});
+    await setImmediate();
+    f.panel.status('connected');
+    f.preferences.autoFocus = true;
+    view.setPreferences(f.preferences);
+    view.syncTabState();
+    await Promise.resolve();
+    assert.equal(f.requests.length, 0);
+    f.tab.active = false;
+    view.syncTabState();
+    f.tab.active = true;
+    view.syncTabState();
+    await Promise.resolve();
+    assert.equal(f.events.includes('autofocus'), true);
+    view.dispose();
+  }
 });
 
 test('manual reconnect and takeover reuse the mounted screen and environment', async () => {
@@ -170,7 +304,6 @@ test('manual reconnect and takeover reuse the mounted screen and environment', a
     assert.equal(f.panel, original);
     assert.deepEqual(f.events, [
       'reconnect',
-      'cancel autofocus',
       ['state', { status: 'reconnecting' }],
       'focus', // Immediately, never upon later connection.
       ['state', { status: 'connected' }],
@@ -181,7 +314,6 @@ test('manual reconnect and takeover reuse the mounted screen and environment', a
   original.status('reconnecting'); // Automatic recovery, even before the first auto-focus.
   original.status('connected');
   assert.deepEqual(f.events, [
-    'cancel autofocus',
     ['state', { status: 'reconnecting' }],
     ['state', { status: 'connected' }],
   ]);
@@ -192,8 +324,8 @@ test('manual reconnect and takeover reuse the mounted screen and environment', a
     assert.deepEqual(f.events, []);
   }
   original.status('readonly');
-  f.hide();
-  view.setVisible(false);
+  f.tab.visible = false;
+  view.syncTabState();
   f.events.length = 0;
   view.retry(true);
   assert.deepEqual(f.events, []);
