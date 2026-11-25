@@ -29,19 +29,18 @@ export function registerSettingsPage(
     () => ctx.locale.register(ns, preferenceMessages),
     'rio: settings locale',
   );
+  // The form controls writability. Losing its namespace must not hide the page or discard a draft.
   ctx.effect(
     () =>
-      ctx.configForms.whileServed([RIO_PREFERENCES_NAMESPACE], () =>
-        ctx.slots.inject(slot, () =>
-          ctx.slots.register(
-            {
-              name: slot,
-              key: RIO_PREFERENCES_NAMESPACE,
-              locale: ns,
-              inject: () => ({ editor, fonts }),
-            },
-            SettingsSlot,
-          ),
+      ctx.slots.inject(slot, () =>
+        ctx.slots.register(
+          {
+            name: slot,
+            key: RIO_PREFERENCES_NAMESPACE,
+            locale: ns,
+            inject: () => ({ editor, fonts }),
+          },
+          SettingsSlot,
         ),
       ),
     'rio: bundle settings',

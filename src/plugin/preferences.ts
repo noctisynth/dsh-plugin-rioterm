@@ -36,10 +36,6 @@ interface ConfigForm<T> {
 /** Structural subset of the 0.2.2-rc.5 Client service; never import a Client plugin at runtime. */
 export interface PreferenceConfigForms {
   get<T>(entryId: string): ConfigForm<T>;
-  whileServed(
-    namespaces: readonly string[],
-    register: (served: ReadonlySet<string>) => () => void,
-  ): () => void;
 }
 
 const fields = Object.keys(preferenceDefaults) as Field[];
@@ -114,7 +110,7 @@ function layer(
 
 /** One window consumes the Host's shared mirror/ordered write queue, not a second preference store. */
 export function createPreferenceEditor(
-  configForms: Pick<PreferenceConfigForms, 'get'>,
+  configForms: PreferenceConfigForms,
 ): PreferenceEditor {
   const form = configForms.get<unknown>(RIO_PREFERENCES_NAMESPACE);
   let source: FormSnapshot<unknown> | undefined;

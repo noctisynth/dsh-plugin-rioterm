@@ -74,13 +74,13 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
   const closeHandlers = [];
   const disposers = [];
   const operations = [];
-  const accepted = {
-    status: 'ready',
-    value: {},
-    user: {},
-    revision: 1,
-    writable: true,
-  };
+  let form = { status: 'loading', writable: false };
+  const listeners = new Set();
+  const publish = (snapshot) =>
+    TestRenderer.act(() => {
+      form = snapshot;
+      for (const notify of listeners) notify();
+    });
   const hostTheme = {
     revision: 0,
     fontSizes: { terminal: 13 },
@@ -89,11 +89,19 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
   client.apply({
     effect: (fn) => disposers.push(fn()),
     configForms: {
-      get: () => ({
-        getSnapshot: () => accepted,
-        subscribe: () => noop,
-      }),
-      whileServed: (_names, register) => register(new Set([manifest.name])),
+      get: (entryId) => {
+        assert.equal(entryId, manifest.name);
+        return {
+          getSnapshot: () => form,
+          subscribe: (notify) => {
+            listeners.add(notify);
+            return () => listeners.delete(notify);
+          },
+          mutate: () => assert.fail('opening the settings page must not write'),
+        };
+      },
+      // No namespace is advertised when the detail page is first opened.
+      whileServed: () => noop,
     },
     theme: {
       getTheme: () => hostTheme,
@@ -146,13 +154,16 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     assert.deepEqual(closeHandlers, ['rio-terminal']);
     const settings = slots.get('plugins.bundle.config');
     assert.equal(settings?.def.key, manifest.name);
-    const settingsView = TestRenderer.create(
-      React.createElement(settings.render, {
-        ...settings.def.inject(),
-        view: 'page',
-        t: (key) => key,
-      }),
-    );
+    let settingsView;
+    TestRenderer.act(() => {
+      settingsView = TestRenderer.create(
+        React.createElement(settings.render, {
+          ...settings.def.inject(),
+          view: 'page',
+          t: (key) => key,
+        }),
+      );
+    });
     try {
       assert.equal(
         settingsView.root.findAll(
@@ -162,9 +173,43 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         ).length,
         1,
       );
+      const status = () =>
+        settingsView.root.findByProps({ role: 'status' }).children.join('');
+      const locked = () =>
+        settingsView.root.findByType('fieldset').props.disabled;
+      const save = () =>
+        settingsView.root
+          .findAllByType('button')
+          .find((node) => node.children.join('') === 'save');
+      assert.equal(status(), 'loading');
+      assert.equal(locked(), true);
+      assert.equal(save().props.disabled, true);
+      publish({ status: 'unavailable', writable: false });
+      assert.equal(status(), 'unavailable');
+      assert.equal(locked(), true);
+      assert.equal(save().props.disabled, true);
+      publish({
+        status: 'ready',
+        writable: true,
+        revision: 1,
+        user: {},
+        value: {},
+      });
+      assert.equal(locked(), false);
+      const fontSize = settingsView.root
+        .findAllByType('input')
+        .find((node) => node.props.name === 'fontSize');
+      TestRenderer.act(() =>
+        fontSize.props.onChange({ currentTarget: { value: '17' } }),
+      );
+      assert.equal(save().props.disabled, false);
+      publish({ status: 'unavailable', writable: false });
+      assert.equal(save().props.disabled, true);
+      assert.equal(fontSize.props.value, '17'); // The page and its unsaved draft stay mounted.
       assert.deepEqual(operations, []); // Visiting the bundle never probes a shell.
     } finally {
-      settingsView.unmount();
+      TestRenderer.act(() => settingsView.unmount());
+      assert.equal(listeners.size, 0);
     }
     const slot = slots.get('sidebar.right.tab.guide.entry');
     assert.equal(slot.def.key, manifest.name);
