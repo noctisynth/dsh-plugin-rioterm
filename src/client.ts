@@ -22,7 +22,6 @@ const copy = {
       'Open a new interactive user shell in this session’s working directory.',
     loading: 'Loading Rio…',
     opening: 'Connecting to your terminal…',
-    connected: 'Connected. Click the terminal to type.',
     idle: 'No shell has been started in this tab.',
     start: 'Start shell',
     control: 'Take input control',
@@ -35,6 +34,7 @@ const copy = {
     wasmFailed:
       'The Rio engine could not start. Fix the error and refresh this page.',
     resourceFailed: 'Could not load the Rio engine.',
+    details: 'Error details',
     retry: 'Retry',
     reconnect: 'Reconnect',
     new: 'Open a new Rio terminal',
@@ -45,7 +45,6 @@ const copy = {
     description: '在当前会话的工作目录中新建一个可交互的用户 shell。',
     loading: '正在加载 Rio…',
     opening: '正在连接终端…',
-    connected: '已连接，点击终端即可输入。',
     idle: '此标签尚未启动 shell。',
     start: '启动 shell',
     control: '取得输入控制权',
@@ -56,6 +55,7 @@ const copy = {
     missing: '此标签没有可恢复的 Rio 进程，未新建替代 shell。',
     wasmFailed: 'Rio 引擎初始化失败。请解决错误后刷新页面。',
     resourceFailed: '无法加载 Rio 引擎。',
+    details: '错误详情',
     retry: '重试',
     reconnect: '重新连接',
     new: '打开新的 Rio 终端',
@@ -204,9 +204,11 @@ function Occurrence({
   const visible = useRef(tab.visible);
   visible.current = tab.visible;
   const screen = useRef<RioScreen | null>(null);
+  const attachment = useRef<ReturnType<RioSession['mount']> | null>(null);
   useEffect(() => {
     if (tab.visible) setStarted(true);
     screen.current?.setVisible(tab.visible);
+    attachment.current?.setVisible(tab.visible);
   }, [tab.visible]);
   const label = useRef(t('input'));
   label.current = t('input');
@@ -249,11 +251,13 @@ function Occurrence({
         screen.current = adapter;
         adapter.setVisible(visible.current);
         channel = model.mount(ticket, limits, {
+          visible: visible.current,
           screen: adapter,
           status(key, msg) {
             if (mounted) setState(msg ? { key, msg } : { key });
           },
         });
+        attachment.current = channel;
         // Focus is always an explicit click/keyboard action, never an async side effect.
       })
       .catch((e: unknown) => {
@@ -269,6 +273,7 @@ function Occurrence({
       adapter?.setVisible(false);
       adapter?.dispose();
       if (screen.current === adapter) screen.current = null;
+      if (attachment.current === channel) attachment.current = null;
       ac.abort();
     };
   }, [started, attempt, model, ticket]);
@@ -277,60 +282,82 @@ function Occurrence({
     'section',
     {
       'aria-label': t('title'),
+      'aria-busy': state.key === 'loading' || state.key === 'opening',
       'data-rio-terminal': true,
       style: {
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
+        isolation: 'isolate',
+        width: '100%',
         height: '100%',
         minHeight: 0,
         minWidth: 0,
         overflow: 'hidden',
       },
     },
-    h(
-      'div',
-      {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '4px 8px',
-          flexWrap: 'wrap',
-        },
-      },
-      h('span', { role: 'status' }, t(state.key)),
-      state.msg && h('small', { role: 'alert' }, state.msg),
-      state.key === 'idle' &&
-        h(
-          'button',
-          { type: 'button', onClick: () => setRequested(issue()) },
-          t('start'),
-        ),
-      state.key === 'readonly' &&
-        h(
-          'button',
-          { type: 'button', onClick: () => setAttempt((n) => n + 1) },
-          t('control'),
-        ),
-      retry &&
-        h(
-          'button',
-          { type: 'button', onClick: () => setAttempt((n) => n + 1) },
-          t(state.key === 'resourceFailed' ? 'retry' : 'reconnect'),
-        ),
-      (state.key === 'exited' ||
-        state.key === 'missing' ||
-        state.key === 'failed') &&
-        h(
-          'button',
-          { type: 'button', onClick: () => launch(tab, issue) },
-          t('new'),
-        ),
-    ),
+    // Keep the observed terminal in the same slot at full size, even when a notice wraps.
     h('div', {
       ref: element,
-      style: { flex: '1 1 0', minHeight: 0, minWidth: 0, overflow: 'hidden' },
+      style: { position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden' },
     }),
+    state.key !== 'connected' &&
+      h(
+        'div',
+        {
+          style: {
+            position: 'absolute',
+            insetBlockStart: 4,
+            insetInlineEnd: 4,
+            maxWidth: 'calc(100% - 8px)',
+            maxHeight: 'calc(100% - 8px)',
+            boxSizing: 'border-box',
+            overflow: 'auto',
+            overflowWrap: 'anywhere',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '4px 8px',
+            flexWrap: 'wrap',
+            background: 'var(--dsw-alias-bg-base, Canvas)',
+            color: 'var(--dsw-alias-label-primary, CanvasText)',
+            border: '1px solid var(--dsw-alias-border-l1)',
+            borderRadius: 8,
+          },
+        },
+        h('span', { role: 'status' }, t(state.key)),
+        state.msg &&
+          h(
+            'details',
+            { key: state.key },
+            h('summary', { style: { cursor: 'pointer' } }, t('details')),
+            h('small', null, state.msg),
+          ),
+        state.key === 'idle' &&
+          h(
+            'button',
+            { type: 'button', onClick: () => setRequested(issue()) },
+            t('start'),
+          ),
+        state.key === 'readonly' &&
+          h(
+            'button',
+            { type: 'button', onClick: () => setAttempt((n) => n + 1) },
+            t('control'),
+          ),
+        retry &&
+          h(
+            'button',
+            { type: 'button', onClick: () => setAttempt((n) => n + 1) },
+            t(state.key === 'resourceFailed' ? 'retry' : 'reconnect'),
+          ),
+        (state.key === 'exited' ||
+          state.key === 'missing' ||
+          state.key === 'failed') &&
+          h(
+            'button',
+            { type: 'button', onClick: () => launch(tab, issue) },
+            t('new'),
+          ),
+      ),
   );
 }
 export const inject = [

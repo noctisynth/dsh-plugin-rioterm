@@ -45,11 +45,9 @@ async function hostId(session: string, content: string, nonce: string) {
 export class MissingBinding extends Error {}
 export const detail = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
-export interface Screen extends FrameSink {
-  resize(cols: number, rows: number): void;
-}
 export interface SessionPanel {
-  screen: Screen;
+  visible?: boolean;
+  screen: FrameSink;
   status(s: Status, reason?: string): void;
 }
 interface ActivePanel {
@@ -329,6 +327,8 @@ export class RioSession {
     // No operation on a superseded physical attachment may use its successor's handle or sink.
     this.active?.abort.abort();
     const ac = new AbortController();
+    let visible = panel.visible ?? true;
+    let wake: (() => void) | undefined;
     let wire: TerminalWire | undefined;
     const active: ActivePanel = {
       abort: ac,
@@ -353,6 +353,7 @@ export class RioSession {
     ac.signal.addEventListener(
       'abort',
       () => {
+        wake?.();
         wire?.stop();
         wire = undefined;
       },
@@ -364,6 +365,14 @@ export class RioSession {
         const { id } = await this.open(ticket, limits);
         if (!current()) return;
         await this.ensureHold(id);
+        // A pane can collapse while opening. Hold the shell, but don't take
+        // input/resize control away from a visible window in the meantime.
+        while (current() && !visible) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          wake = undefined;
+        }
         if (!current()) return;
         const stream = this.manager.remote.attach(this.session, id, ac.signal);
         const notify = (s: Status) => {
@@ -371,7 +380,6 @@ export class RioSession {
           if (current()) panel.status(s);
         };
         wire = new TerminalWire(id, stream, limits, panel.screen, notify);
-        wire.onRemoteSize = (cols, rows) => panel.screen.resize(cols, rows);
         await wire.consume(ac.signal);
         if (
           current() &&
@@ -393,6 +401,10 @@ export class RioSession {
     return {
       input: active.input,
       resize: active.resize,
+      setVisible(next: boolean) {
+        visible = next;
+        if (visible) wake?.();
+      },
       detach: () => {
         ac.abort();
         if (this.active === active) this.active = undefined;

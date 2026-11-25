@@ -67,7 +67,8 @@ export interface FrameSink {
   snapshot(cols: number, rows: number, data: string): void;
   write(data: string): void;
   setWritable(value: boolean): void;
-  fit(): void;
+  /** Apply Host geometry at this position in the output stream. Never sends input. */
+  resize(cols: number, rows: number): void;
 }
 export type Status =
   | 'opening'
@@ -104,7 +105,10 @@ export class TerminalWire {
   private rawBytes = 0;
   private writable = false;
   private window?: Window;
-  private size = '';
+  private hostSize = '';
+  // Latest intent for this writable attachment. A state for an earlier resize
+  // can arrive while a later request is still queued or in flight.
+  private requestedSize: string | undefined;
   private ended = false;
   private readonly id: string;
   private readonly handle: Attachment;
@@ -141,6 +145,7 @@ export class TerminalWire {
             owned(this.id, frame.info);
             this.output = frame.sequence;
             if (frame.inputWindow) this.window = frame.inputWindow;
+            this.hostSize = `${frame.info.cols}:${frame.info.rows}`;
             this.screen.snapshot(
               frame.info.cols,
               frame.info.rows,
@@ -183,14 +188,19 @@ export class TerminalWire {
     }
   }
   private update(info: Info, writable: boolean) {
+    const size = `${info.cols}:${info.rows}`;
+    if (size !== this.hostSize) {
+      // The Host queues resize state alongside output. Reflow *here*, even for
+      // the writer: output preceding this state still belongs to the old grid.
+      this.hostSize = size;
+      this.screen.resize(info.cols, info.rows);
+    }
     const canWrite = writable && info.state === 'running';
     if (!canWrite) this.revoke();
-    this.writable = canWrite;
-    const size = `${info.cols}:${info.rows}`;
-    if (this.output >= 0 && size !== this.size && !canWrite)
-      this.onRemoteSize?.(info.cols, info.rows);
-    this.size = size;
-    this.screen.setWritable(canWrite);
+    else if (!this.writable) {
+      this.writable = true;
+      this.screen.setWritable(true);
+    }
     this.notify(
       info.state === 'running'
         ? canWrite
@@ -201,7 +211,6 @@ export class TerminalWire {
           : 'failed',
     );
   }
-  onRemoteSize?: (cols: number, rows: number) => void;
   write(data: string, typed: boolean) {
     if (data && this.writable && !this.ended)
       this.queue(
@@ -221,8 +230,9 @@ export class TerminalWire {
       return;
     cols = Math.min(this.limits.maxCols, cols);
     rows = Math.min(this.limits.maxRows, rows);
-    if (this.size === `${cols}:${rows}`) return;
-    this.size = `${cols}:${rows}`;
+    const target = `${cols}:${rows}`;
+    if (target === (this.requestedSize ?? this.hostSize)) return;
+    this.requestedSize = target;
     this.queue({ type: 'resize', cols, rows }, 0);
   }
   private queue(input: Input, raw: number) {
@@ -258,6 +268,7 @@ export class TerminalWire {
   }
   private revoke() {
     this.writable = false;
+    this.requestedSize = undefined;
     // Unsent commands have no wire sequence yet from the Host's perspective.
     for (const item of this.queued) {
       this.rawBytes -= item.raw;

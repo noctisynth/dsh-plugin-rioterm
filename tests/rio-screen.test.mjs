@@ -122,7 +122,7 @@ test('wheel scrolls history or produces Rio SGR mouse bytes, never an Agent take
   assert.deepEqual(writes, []);
 });
 
-test('local resizing reports a bounded changed size only when visible and writable', (t) => {
+test('layout measures bounded sizes without changing the grid; only a visible writer makes requests', (t) => {
   const { view, sizes, writes } = viewport(t);
   view.fit(640, 300, 8, 15);
   assert.deepEqual(sizes, []);
@@ -133,10 +133,11 @@ test('local resizing reports a bounded changed size only when visible and writab
   view.visible = true;
   view.fit(0, 0, 8, 15);
   view.fit(640, 300, 8, 15);
-  view.fit(640, 300, 8, 15);
   assert.deepEqual(sizes, [[80, 20]]);
+  assert.deepEqual([view.term.options.cols, view.term.options.rows], [12, 3]);
   view.fit(8000, 8000, 8, 15);
   assert.deepEqual(sizes.at(-1), [500, 200]);
+  view.resize(80, 20); // Host state, independent of the newest proposal
   view.write('\x1b[8;4H\x1b[?25l');
   assert.deepEqual(view.term.cursorPosition(), {
     col: 3,

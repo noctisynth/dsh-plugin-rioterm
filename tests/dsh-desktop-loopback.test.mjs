@@ -110,7 +110,7 @@ test('desktop controller and Rio exchange input, resize, screen snapshots and ex
         setWritable: (w) => {
           core.writable = w;
         },
-        fit() {},
+        resize: (c, r) => core.resize(c, r),
       },
       () => {},
     );
@@ -146,7 +146,15 @@ test('desktop controller and Rio exchange input, resize, screen snapshots and ex
     core.text('你好');
     core.key({ key: 'Enter', code: 'Enter', type: 'keydown' });
     core.fit(91 * 8, 31 * 16, 8, 16);
+    assert.deepEqual(
+      [core.term.options.cols, core.term.options.rows],
+      [80, 24],
+    );
     await until(() => frames.filter((f) => f.type === 'ack').length === 3);
+    assert.deepEqual(
+      [core.term.options.cols, core.term.options.rows],
+      [91, 31],
+    );
     assert.deepEqual(input, ['你好', '\r']);
     assert.deepEqual(sizes, [[91, 31]]);
     output.write(Buffer.from('held:你好\r\n\x1b[?1049h\x1b[Hfull-screen'));

@@ -33,7 +33,10 @@ export function createRioScreen(
     position: 'relative',
     width: '100%',
     height: '100%',
-    overflow: 'hidden',
+    // Rio scrolls its own grid. Focusing the invisible IME control must not
+    // create a second, browser-scrolled viewport during a resize.
+    overflow: 'clip',
+    outlineOffset: '-1px',
   });
   const input = doc.createElement('textarea');
   input.setAttribute('aria-label', options.label ?? 'Rio terminal');
@@ -44,6 +47,8 @@ export function createRioScreen(
   input.readOnly = true;
   Object.assign(input.style, {
     position: 'absolute',
+    top: '0',
+    left: '0',
     opacity: '0',
     width: '1px',
     height: '1em',
@@ -88,8 +93,16 @@ export function createRioScreen(
     input.style.left = `${Math.max(0, pos.col) * renderer.cellWidth}px`;
     input.style.top = `${Math.max(0, pos.line) * renderer.cellHeight}px`;
   }
+  // A divider drag can emit a layout per animation frame. Measure the actual
+  // box once per short interval; the last event wins, even in a continuous drag.
+  let fitTimer: ReturnType<typeof setTimeout> | undefined;
+  function cancelFit() {
+    clearTimeout(fitTimer);
+    fitTimer = undefined;
+  }
   function fit() {
-    if (stopped) return;
+    cancelFit();
+    if (!core.interactive) return;
     core.fit(
       root.clientWidth,
       root.clientHeight,
@@ -97,7 +110,10 @@ export function createRioScreen(
       renderer.cellHeight,
     );
   }
-  const observer = new ResizeObserver(fit);
+  const observer = new ResizeObserver(() => {
+    if (core.interactive && fitTimer === undefined)
+      fitTimer = setTimeout(fit, 75);
+  });
   observer.observe(container);
 
   input.addEventListener(
@@ -138,7 +154,23 @@ export function createRioScreen(
     },
     events,
   );
-  input.addEventListener('blur', cancelInput, events);
+  input.addEventListener(
+    'focus',
+    () => {
+      if (input.matches(':focus-visible'))
+        root.style.outline =
+          '1px solid var(--dsw-alias-label-primary, Highlight)';
+    },
+    events,
+  );
+  input.addEventListener(
+    'blur',
+    () => {
+      root.style.outline = '';
+      cancelInput();
+    },
+    events,
+  );
   input.addEventListener(
     'paste',
     (event) => {
@@ -210,6 +242,7 @@ export function createRioScreen(
     (event) => {
       if (event.button !== 0 || !core.visible) return;
       focus();
+      root.style.outline = ''; // Pointer focus needs no keyboard navigation ring.
       if (event.pointerType === 'touch') return;
       const { row, col, sideRight } = renderer.cellAt(
         event.clientX,
@@ -294,22 +327,23 @@ export function createRioScreen(
       core.write(data);
     },
     resize(cols, rows) {
-      if (
-        !stopped &&
-        (cols !== core.term.options.cols || rows !== core.term.options.rows)
-      )
-        core.term.resize(cols, rows);
+      core.resize(cols, rows);
     },
     setWritable(writable) {
+      if (writable === core.writable) return;
       core.writable = writable;
       input.readOnly = !writable;
-      if (!writable) cancelInput();
-      else fit();
+      if (writable) fit();
+      else {
+        cancelFit();
+        cancelInput();
+      }
     },
     setVisible(visible) {
       core.visible = visible;
       root.hidden = !visible;
       if (!visible) {
+        cancelFit();
         input.blur();
         cancelInput();
       } else fit();
@@ -320,6 +354,7 @@ export function createRioScreen(
       if (stopped) return;
       stopped = true;
       observer.disconnect();
+      cancelFit();
       lifetime.abort();
       renderer.dispose();
       core.dispose();

@@ -109,7 +109,7 @@ function attach() {
     setWritable: (w) => {
       terminal.writable = w;
     },
-    fit() {},
+    resize: (c, r) => terminal.resize(c, r),
   };
   wire = new TerminalWire(
     id,

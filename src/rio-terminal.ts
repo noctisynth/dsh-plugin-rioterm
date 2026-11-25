@@ -135,10 +135,18 @@ export class RioTerminal {
       2,
       Math.min(this.options.maxRows ?? 200, Math.floor(height / cellHeight)),
     );
-    if (cols === this.term.options.cols && rows === this.term.options.rows)
-      return;
-    this.term.resize(cols, rows);
+    // This is a request, not a grid update. Even a return to the current
+    // grid might have to undo a request that the Host has not applied yet.
     this.options.onResize(cols, rows);
+  }
+
+  /** Consume a geometry change from the same ordered stream as write(). */
+  resize(cols: number, rows: number): void {
+    if (
+      !this.stopped &&
+      (cols !== this.term.options.cols || rows !== this.term.options.rows)
+    )
+      this.term.resize(cols, rows);
   }
 
   dispose(): void {

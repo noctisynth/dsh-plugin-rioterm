@@ -126,7 +126,6 @@ function panel() {
       write: (v) => events.push(['write', v]),
       resize: (...v) => events.push(['size', ...v]),
       setWritable: (v) => events.push(['writable', v]),
-      fit() {},
     },
     async wait(key) {
       if (seen.some(([k]) => k === key)) return;
@@ -192,6 +191,42 @@ test('explicit new ticket allocates once; collapse retains without input; reload
   assert.deepEqual(h.closes, h.creates);
   assert.equal(storage.length, 0);
 });
+test('collapse during startup retains the PTY without taking resize or input control until visible', {
+  timeout: 5000,
+}, async (t) => {
+  const h = host();
+  const retaining = deferred();
+  const proceed = deferred();
+  const retain = h.remote.retain;
+  h.remote.retain = async function* (...args) {
+    for await (const frame of retain(...args)) {
+      retaining.resolve();
+      await proceed.promise;
+      yield frame;
+    }
+  };
+  const { mgr, item } = fresh(t, h);
+  const p = panel();
+  const channel = item.mount(mgr.issue(sid), limits, p);
+  await retaining.promise;
+  channel.setVisible(false);
+  proceed.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.holds.length, 1);
+  assert.equal(h.views.length, 0);
+  channel.setVisible(true);
+  await p.wait('connected');
+  channel.setVisible(false);
+  channel.setVisible(true);
+  assert.equal(h.views.length, 1);
+  channel.detach();
+  await channel.done;
+  const hidden = item.mount(undefined, limits, { ...panel(), visible: false });
+  hidden.detach();
+  await hidden.done;
+  assert.equal(h.views.length, 1);
+});
+
 test('no ticket/unknown established terminal never allocates a substitute or targets a supplied ID', {
   timeout: 5000,
 }, async (t) => {
