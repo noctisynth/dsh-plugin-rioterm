@@ -8,6 +8,7 @@ import {
   resolvePreferences,
 } from '../src/preferences/values.ts';
 import { makeRioRenderer } from '../src/rio/renderer.ts';
+import { defaultAnsiColor } from '../src/rio/theme-defaults.ts';
 
 before(async () => {
   await initWasm(
@@ -127,6 +128,7 @@ function setup(t) {
                   this.fillStyle,
                   this.globalAlpha,
                   ...args,
+                  this.font,
                 ]);
               },
             };
@@ -230,6 +232,41 @@ test('DOM stays the default, with live DSH CSS, measured cells, and no speculati
   assert.equal(custom.element.children[1].style.backgroundColor, '#789abc');
 });
 
+test('DSH preset pins the shipped xterm defaults in all 16 slots; absent preset keeps Rio colors', (t) => {
+  const desktop = [
+    '#2e3436',
+    '#cc0000',
+    '#4e9a06',
+    '#c4a000',
+    '#3465a4',
+    '#75507b',
+    '#06989a',
+    '#d3d7cf',
+    '#555753',
+    '#ef2929',
+    '#8ae234',
+    '#fce94f',
+    '#729fcf',
+    '#ad7fa8',
+    '#34e2e2',
+    '#eeeeec',
+  ];
+  assert.deepEqual(
+    ansiNames.map((name) => defaultAnsiColor(name, 'dsh')),
+    desktop,
+  );
+  assert.deepEqual(
+    ansiNames.map((name) => defaultAnsiColor(name)),
+    ansiNames.map((name) => defaultTheme[name]),
+  );
+  const { make, swatches } = setup(t);
+  make({ renderer: 'canvas', ansiPreset: 'dsh' });
+  assert.deepEqual(
+    swatches[0].slice(-16).map(([color]) => color),
+    desktop,
+  );
+});
+
 test('actual DOM rows use system selection colors or explicit overrides and keep unselected ANSI runs', (t) => {
   const { make, term, frame } = setup(t);
   term.write('\x1b[31mR\x1b[0mQ');
@@ -240,7 +277,17 @@ test('actual DOM rows use system selection colors or explicit overrides and keep
   for (const [opts, red, selected] of [
     [{}, defaultTheme.red, 'color:HighlightText;background-color:Highlight'],
     [
-      { palette, selectionForeground: '#ace', selectionBackground: '#1328' },
+      { ansiPreset: 'dsh' },
+      '#cc0000',
+      'color:HighlightText;background-color:Highlight',
+    ],
+    [
+      {
+        ansiPreset: 'dsh',
+        palette,
+        selectionForeground: '#ace',
+        selectionBackground: '#1328',
+      },
       '#bbccdd',
       'color:#aaccee;background-color:#11332288',
     ],
@@ -255,6 +302,106 @@ test('actual DOM rows use system selection colors or explicit overrides and keep
     view.dispose();
   }
 });
+
+for (const renderer of ['dom', 'canvas']) {
+  test(`${renderer} brightens only bold low ANSI foregrounds, before inverse and selection`, (t) => {
+    const { make, term, frame, draws, pixels } = setup(t);
+    const palette = Array(16).fill('');
+    palette[1] = '#123456';
+    palette[9] = '#abcdef';
+    for (const [ansiPreset, boldBright, enabled] of [
+      ['rio', 'auto', false],
+      ['dsh', 'auto', true],
+      ['rio', 'always', true],
+      ['dsh', 'always', true],
+      ['rio', 'never', false],
+      ['dsh', 'never', false],
+    ]) {
+      const view = make({ renderer, ansiPreset, boldBright, palette });
+      const theme =
+        renderer === 'canvas'
+          ? pixels
+          : {
+              foreground: fgToken,
+              background: bgToken,
+              selectionForeground: 'HighlightText',
+              selectionBackground: 'Highlight',
+              ...Object.fromEntries(
+                ansiNames.map((name, i) => [
+                  name,
+                  palette[i] || defaultAnsiColor(name, ansiPreset),
+                ]),
+              ),
+            };
+      const slot = (i) => theme[ansiNames[i]];
+      const promoted = (i) => slot(enabled ? i + 8 : i);
+      // [SGR, painted fg, painted bg, bold font]. Each sample starts from SGR 0.
+      const cells = [
+        ...Array.from({ length: 8 }, (_, i) => [
+          [`1;${30 + i}`, promoted(i), theme.background, true],
+          [`1;38;5;${i}`, promoted(i), theme.background, true],
+        ]).flat(),
+        ['1;31;22', slot(1), theme.background, false],
+        ['1;39;41', theme.foreground, slot(1), true],
+        ['1;91', slot(9), theme.background, true],
+        ['1;38;5;8', slot(8), theme.background, true],
+        ['1;38;5;244', '#808080', theme.background, true],
+        ['1;38;2;0;0;2', '#000002', theme.background, true],
+        ['1;31;48;5;4', promoted(1), slot(4), true],
+        ['1;31;44;7', slot(4), promoted(1), true],
+        [
+          '1;31;44;7',
+          theme.selectionForeground,
+          theme.selectionBackground,
+          true,
+        ],
+      ];
+      const glyph = (col) => String.fromCharCode(65 + col);
+      term.write(
+        '\x1b[H\x1b[?25l' +
+          cells.map(([sgr], col) => `\x1b[0;${sgr}m${glyph(col)}`).join(''),
+      );
+      term.selectionBegin(0, cells.length - 1);
+      term.selectionUpdate(0, cells.length - 1, true);
+      frame();
+      for (const [col, [sgr, fg, bg, bold]] of cells.entries()) {
+        const note = `${renderer} ${ansiPreset}/${boldBright} SGR ${sgr} at ${col}`;
+        if (renderer === 'dom') {
+          const [row] = view.element.children[0].children;
+          const run = row.children.find((child) =>
+            child.textContent.includes(glyph(col)),
+          );
+          const css = [
+            fg !== theme.foreground && `color:${fg}`,
+            bg !== theme.background && `background-color:${bg}`,
+            bold && 'font-weight:bold',
+          ]
+            .filter(Boolean)
+            .join(';');
+          assert.equal(run?.style?.cssText ?? '', css, note);
+        } else {
+          const paint = draws.find(
+            ([op, text]) => op === 'text' && text === glyph(col),
+          );
+          const rect = draws.find(
+            ([op, , x, y, width]) =>
+              op === 'rect' &&
+              y === 0 &&
+              x <= col * view.cellWidth &&
+              x + width > col * view.cellWidth,
+          );
+          assert.deepEqual(
+            [paint?.[2], rect?.[1], paint?.at(-1).startsWith('bold ')],
+            [fg, bg, bold],
+            note,
+          );
+        }
+      }
+      term.clearSelection();
+      view.dispose();
+    }
+  });
+}
 
 test('Canvas resolves all theme slots inside the connected screen and samples again after a theme change', (t) => {
   const { make, term, swatches, hostColors, pixels, draws, root, frame } =

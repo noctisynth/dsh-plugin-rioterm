@@ -105,6 +105,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  rioterm@0.1.8: 99c6243fe2597a63cf38c997dfffbcdcccf336dd0fca6a4d828726b30a14e821
+
 importers:
 
   .:
@@ -145,7 +148,7 @@ importers:
         version: 18.3.1(react@18.3.1)
       rioterm:
         specifier: 0.1.8
-        version: 0.1.8
+        version: 0.1.8(patch_hash=99c6243fe2597a63cf38c997dfffbcdcccf336dd0fca6a4d828726b30a14e821)
       tailwind-merge:
         specifier: ^3.7.1
         version: 3.7.1
@@ -1495,7 +1498,7 @@ snapshots:
 
   resolve-pkg-maps@1.0.0: {}
 
-  rioterm@0.1.8: {}
+  rioterm@0.1.8(patch_hash=99c6243fe2597a63cf38c997dfffbcdcccf336dd0fca6a4d828726b30a14e821): {}
 
   rolldown-plugin-dts@0.30.2(rolldown@1.3.3)(tsrs@7.1.0-beta.tsrs4)(typescript@7.0.2):
     dependencies:

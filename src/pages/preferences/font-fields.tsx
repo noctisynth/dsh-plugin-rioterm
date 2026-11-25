@@ -2,12 +2,22 @@ import * as React from 'react';
 import {
   fontSizeRange,
   type HostFonts,
+  lineHeightRange,
+  preferenceDefaults,
   type RioOverrides,
   resolvePreferences,
 } from '../../preferences/values.ts';
-import { type FieldForm, hintClass, TextField } from './fields.tsx';
+import {
+  type FieldForm,
+  hintClass,
+  SettingsRow,
+  SettingsSection,
+  TextField,
+  ToggleField,
+} from './fields.tsx';
+import { PaddingFields } from './padding-fields.tsx';
 
-export function FontFields({
+export function FontLayoutFields({
   form,
   hostFonts,
   preview,
@@ -21,13 +31,7 @@ export function FontFields({
   const invalid =
     form.invalid.includes('fontFamily') || form.invalid.includes('fontSize');
   return (
-    <section aria-label={t('fonts')} className="rio:grid rio:min-w-0 rio:gap-3">
-      <div className="rio:grid rio:gap-1">
-        <h4 className="rio:m-0 rio:text-base rio:font-semibold">
-          {t('fonts')}
-        </h4>
-        <p className={hintClass}>{t('fontHelp')}</p>
-      </div>
+    <SettingsSection title={t('fontLayout')} description={t('fontHelp')}>
       <TextField
         form={form}
         name="fontFamily"
@@ -40,22 +44,34 @@ export function FontFields({
         fallback={String(hostFonts.fontSize)}
         range={fontSizeRange}
       />
-      <div className="rio:grid rio:min-w-0 rio:gap-1 rio:rounded-md rio:bg-muted rio:px-3 rio:py-2">
-        <span className={hintClass}>{t('hostFont')}</span>
-        <p className="rio:m-0 rio:text-sm rio:wrap-anywhere">
-          <bdi>{hostFonts.fontFamily}</bdi> ·{' '}
-          <span className="rio:whitespace-nowrap">{hostFonts.fontSize} px</span>
-        </p>
-        <span className={hintClass}>{t('fontPreview')}</span>
-        {/* Only these two live values depend on validated font choices / the DSH font snapshot. The preview never applies styles to a real terminal. */}
+      <PaddingFields form={form} />
+      <SettingsRow
+        label={t('fontPreview')}
+        description={
+          <>
+            {t('hostFont')}: <bdi>{hostFonts.fontFamily}</bdi> ·{' '}
+            <span className="rio:whitespace-nowrap">
+              {hostFonts.fontSize} px
+            </span>
+          </>
+        }
+      >
+        {/* Only the sample uses live font values. Never apply a draft to a real terminal. */}
         <p
           style={{ fontFamily, fontSize }}
-          className="rio:m-0 rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:leading-normal rio:wrap-anywhere"
+          className="rio:m-0 rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:rounded-md rio:bg-muted rio:px-2.5 rio:py-1 rio:leading-normal rio:wrap-anywhere"
         >
           {t('fontSample')}
         </p>
         {invalid && <p className={hintClass}>{t('fontFallback')}</p>}
-      </div>
-    </section>
+      </SettingsRow>
+      <TextField
+        form={form}
+        name="lineHeight"
+        fallback={String(preferenceDefaults.lineHeight)}
+        range={lineHeightRange}
+      />
+      <ToggleField form={form} name="fit" hint={t('fitHint')} />
+    </SettingsSection>
   );
 }

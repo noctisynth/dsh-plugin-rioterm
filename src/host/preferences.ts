@@ -1,6 +1,8 @@
 import z from '@deepseek-ai/schemastery';
 import {
   ansiNames,
+  ansiPresets,
+  boldBrightModes,
   preferenceDefaults as defaults,
   fontSizeRange,
   latencyRange,
@@ -66,6 +68,8 @@ export const Config = z.object({
   cursor: color.default(defaults.cursor).volatile(),
   selectionForeground: color.default(defaults.selectionForeground).volatile(),
   selectionBackground: color.default(defaults.selectionBackground).volatile(),
+  ansiPreset: z.union(ansiPresets).default(defaults.ansiPreset).volatile(),
+  boldBright: z.union(boldBrightModes).default(defaults.boldBright).volatile(),
   palette: z
     .union([z.const([] as string[]), palette])
     .default(defaults.palette)

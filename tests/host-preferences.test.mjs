@@ -31,6 +31,8 @@ test('the Cordis Config exposes every preference as a serializable, volatile fie
     paddingBottom: 3,
     paddingLeft: 1,
     cursor: '#abcd',
+    ansiPreset: 'dsh',
+    boldBright: 'always',
     palette: colors({ 0: '#aabbccdd', 15: '#fff' }),
     renderer: 'canvas',
     altIsMeta: false,
@@ -68,6 +70,9 @@ test('the Cordis Config exposes every preference as a serializable, volatile fie
     { fit: 'true' },
     { foreground: 'red' },
     { selectionBackground: '#00000' },
+    { ansiPreset: 'automatic' },
+    { boldBright: 'inherit' },
+    { boldBright: false },
     { palette: ['#fff'] },
     { palette: Array(17).fill('#fff') },
     { palette: colors({ 1: null }) },
@@ -169,6 +174,60 @@ test('only accepted changes replace snapshots; sparse ANSI slots see lower color
   off();
   publish(wire);
   assert.equal(changes, 2);
+});
+
+test('the preset inherits, pins and clears independently of sparse profile/user palette slots', async () => {
+  const base = { ansiPreset: 'dsh', palette: colors({ 0: '#111', 1: '#222' }) };
+  const user = { palette: colors({ 1: '#333' }) };
+  const writes = [];
+  const { editor, publish } = mirror(ready(user, base), async (ops) => {
+    writes.push(ops);
+    return true;
+  });
+  assert.equal(editor.getSnapshot().value.ansiPreset, 'dsh');
+  assert.equal(editor.getSnapshot().user.ansiPreset, undefined);
+  const pinned = { ...user, ansiPreset: 'rio' };
+  await editor.save(pinned, 0);
+  publish(ready(pinned, base, 1));
+  assert.equal(editor.getSnapshot().value.ansiPreset, 'rio');
+  assert.deepEqual(
+    editor.getSnapshot().value.palette,
+    colors({ 0: '#111', 1: '#333' }),
+  );
+  await editor.save(user, 1);
+  publish(ready(user, base, 2));
+  assert.equal(editor.getSnapshot().value.ansiPreset, 'dsh');
+  assert.deepEqual(writes, [
+    [{ op: 'set', path: ['ansiPreset'], value: 'rio' }],
+    [{ op: 'unset', path: ['ansiPreset'] }],
+  ]);
+});
+
+test('explicit auto sets a user override; clearing unsets only boldBright and restores the profile mode', async () => {
+  const user = { renderer: 'canvas' };
+  const base = { ansiPreset: 'dsh', boldBright: 'never' };
+  const pinned = { ...user, boldBright: 'auto' };
+  const writes = [];
+  const { editor, publish } = mirror(
+    ready(user, base),
+    async (ops, revision) => {
+      writes.push([ops, revision]);
+      return true;
+    },
+  );
+  assert.equal(editor.getSnapshot().value.boldBright, 'never');
+  assert.equal(await editor.save(pinned, 0), true);
+  publish(ready(pinned, base, 1));
+  assert.deepEqual(editor.getSnapshot().user, pinned);
+  assert.equal(editor.getSnapshot().value.boldBright, 'auto');
+  assert.equal(await editor.save(user, 1), true);
+  publish(ready(user, base, 2));
+  assert.deepEqual(editor.getSnapshot().user, user);
+  assert.equal(editor.getSnapshot().value.boldBright, 'never');
+  assert.deepEqual(writes, [
+    [[{ op: 'set', path: ['boldBright'], value: 'auto' }], 0],
+    [[{ op: 'unset', path: ['boldBright'] }], 1],
+  ]);
 });
 
 test('explicit inheritance markers resolve through the profile and are only cleaned by a fenced user edit', async () => {

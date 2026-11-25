@@ -17,6 +17,10 @@ export const ansiNames = [
   'brightCyan',
   'brightWhite',
 ] as const;
+export const ansiPresets = ['rio', 'dsh'] as const;
+export type AnsiPreset = (typeof ansiPresets)[number];
+export const boldBrightModes = ['auto', 'always', 'never'] as const;
+export type BoldBright = (typeof boldBrightModes)[number];
 export const colorFields = [
   'foreground',
   'background',
@@ -46,6 +50,8 @@ export interface RioPreferenceValues
   autoFocus: boolean;
   fit: boolean;
   detectUrls: boolean;
+  ansiPreset: AnsiPreset;
+  boldBright: BoldBright;
   palette: string[];
   renderer: 'dom' | 'canvas';
   cursorStyle: 'block' | 'bar' | 'underline';
@@ -72,6 +78,8 @@ export const preferenceDefaults: RioPreferenceValues = {
   cursor: '',
   selectionForeground: '',
   selectionBackground: '',
+  ansiPreset: 'rio',
+  boldBright: 'auto',
   palette: [],
   renderer: 'dom',
   cursorStyle: 'block',

@@ -13,6 +13,7 @@ import {
   colorFields,
   type EffectiveRioPreferences,
 } from '../preferences/values.ts';
+import { defaultAnsiColor, usesBoldBright } from './theme-defaults.ts';
 
 export interface RioRenderer
   extends Pick<
@@ -45,7 +46,10 @@ function fullHex(color: string): string {
     : color;
 }
 
-function composeTheme(overrides: EffectiveRioPreferences['theme']): Theme {
+function composeTheme({
+  theme: overrides,
+  ansiPreset,
+}: EffectiveRioPreferences): Theme {
   const theme = { ...dshTheme };
   for (const key of colorFields) {
     const color = overrides[key];
@@ -53,7 +57,7 @@ function composeTheme(overrides: EffectiveRioPreferences['theme']): Theme {
   }
   for (const [index, key] of ansiNames.entries()) {
     const color = overrides.palette?.[index];
-    if (color) theme[key] = fullHex(color);
+    theme[key] = color ? fullHex(color) : defaultAnsiColor(key, ansiPreset);
   }
   return theme;
 }
@@ -176,12 +180,17 @@ export function makeRioRenderer(
   root: HTMLElement,
 ): RioRenderer {
   const { fontFamily, fontSize, lineHeight } = preferences;
-  const font = { fontFamily, fontSize, lineHeight };
-  const theme = composeTheme(preferences.theme);
+  const options = {
+    fontFamily,
+    fontSize,
+    lineHeight,
+    boldBright: usesBoldBright(preferences),
+  };
+  const theme = composeTheme(preferences);
   if (preferences.renderer === 'canvas') {
     try {
       const canvas = new CanvasView(term, {
-        ...font,
+        ...options,
         theme: canvasTheme(root, theme),
         cursorStyle: preferences.cursorStyle,
       });
@@ -197,5 +206,5 @@ export function makeRioRenderer(
       console.warn('Rio Canvas unavailable; using the DOM renderer.', error);
     }
   }
-  return new DomView(term, { ...font, theme });
+  return new DomView(term, { ...options, theme });
 }

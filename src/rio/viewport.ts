@@ -5,6 +5,7 @@ import {
 } from '../preferences/values.ts';
 import type { RioRenderer } from './renderer.ts';
 import type { RioTerminal } from './terminal.ts';
+import { usesBoldBright } from './theme-defaults.ts';
 
 /** This boundary mounts a measured Rio view; it never fits or replaces the parser. */
 interface ViewportPorts {
@@ -20,6 +21,8 @@ function sameAppearance(
 ): boolean {
   if (
     a.renderer !== b.renderer ||
+    a.ansiPreset !== b.ansiPreset ||
+    usesBoldBright(a) !== usesBoldBright(b) ||
     a.fontFamily !== b.fontFamily ||
     a.fontSize !== b.fontSize ||
     a.lineHeight !== b.lineHeight

@@ -24,4 +24,4 @@
 - [Biome 跨层导入限制](../../biome.json)随 `pnpm check` 执行，页面不能依赖具体会话/插件实现；会话与 Rio 不互相导入，都不依赖 React。只服务于终端页的组件、hook 和文案就近维护，不建立通用 `utils` 或转发层。
 - 改挂载或恢复行为，先看[页面挂载测试](../../tests/terminal-mount.test.mjs)和[会话测试](../../tests/dsh-session.test.mjs)。前者用可控端口，不要求 React、浏览器或 PTY；后者覆盖启动许可、失去控制权和延迟关闭。
 - 改字体度量或尺寸同步，运行[有序缩放测试](../../tests/resize-order.test.mjs)。改入口或加载方式，运行[产物注册测试](../../tests/registration.test.mjs)和[宿主资源测试](../../tests/host-route.test.mjs)。类型检查不能代替这些运行时测试。
-- 改设置时，分别运行[设置页交互测试](../../tests/preferences-ui.test.mjs)、[字体继承测试](../../tests/appearance.test.mjs)、[渲染热更新测试](../../tests/rio-preferences.test.mjs)和[真实 DSH 宿主配置测试](../../tests/host-preferences-desktop.test.mjs)。特别核对保存不重启终端、取消不写配置、清空字体后继续跟随宿主。
+- 改设置时，分别运行[设置页交互测试](../../tests/preferences-ui.test.mjs)、[字体继承测试](../../tests/appearance.test.mjs)、[渲染热更新测试](../../tests/rio-preferences.test.mjs)和[真实 DSH 宿主配置测试](../../tests/host-preferences-desktop.test.mjs)。[自动保存时序测试](../../tests/preferences-autosave.test.mjs)单独覆盖宿主确认先后顺序、冲突和输入法组合。特别核对选择立即保存、文本按字段防抖、无效输入不落盘；上一笔写入返回时不能覆盖更新的草稿或其他窗口的修改。自动保存不重启终端，清空字体后继续跟随宿主。

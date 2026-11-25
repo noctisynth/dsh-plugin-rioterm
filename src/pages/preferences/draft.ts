@@ -29,31 +29,8 @@ export function fieldsFrom(overrides: RioOverrides): Fields {
   return fields;
 }
 
-export function changeField(fields: Fields, key: Field, text: string): Fields {
-  const result = { ...fields };
-  if (text === '') delete result[key];
-  else result[key] = text;
-  return result;
-}
-
 export function sameFields(left: Fields, right: Fields): boolean {
   return allFields.every((key) => left[key] === right[key]);
-}
-
-// Apply only the user's edits onto the new version, including intentional removals.
-export function reapplyEdits(
-  before: Fields,
-  after: Fields,
-  latest: Fields,
-): Fields {
-  const result = { ...latest };
-  for (const key of allFields) {
-    if (before[key] === after[key]) continue;
-    const text = after[key];
-    if (text === undefined) delete result[key];
-    else result[key] = text;
-  }
-  return result;
 }
 
 function fieldValue(key: Scalar, text: string): string | boolean | number {

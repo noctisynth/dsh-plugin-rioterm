@@ -76,6 +76,7 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   await root.settings.mutate(
     ns,
     [
+      { op: 'set', path: ['ansiPreset'], value: 'dsh' },
       { op: 'set', path: ['fontSize'], value: 17 },
       { op: 'set', path: ['scrollback'], value: 0 },
       { op: 'set', path: ['paddingTop'], value: 0 },
@@ -87,11 +88,13 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   assert.ok(saved.revision > first.revision);
   assert.ok(events.some(([id, rev]) => id === ns && rev === saved.revision));
   assert.deepEqual(persisted, {
+    ansiPreset: 'dsh',
     fontSize: 17,
     scrollback: 0,
     paddingTop: 0,
     paddingRight: 64,
   });
+  assert.equal(saved.value.ansiPreset, 'dsh');
   assert.equal(saved.value.paddingTop, 0);
   assert.equal(fiber.effectiveConfig.fontSize, ref);
   assert.equal(ref.get(), 17);
@@ -119,10 +122,12 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
     [
       { op: 'unset', path: ['fontSize'] },
       { op: 'unset', path: ['paddingTop'] },
+      { op: 'unset', path: ['ansiPreset'] },
     ],
     saved.revision,
   );
   assert.deepEqual(persisted, { scrollback: 0, paddingRight: 64 });
+  assert.equal(describe().value.ansiPreset, 'rio');
   assert.equal(describe().value.paddingTop, 16);
   assert.equal(ref.get(), 0);
   assert.equal(resources.length, 1);

@@ -4,36 +4,58 @@ import {
   paddingRange,
   preferenceDefaults,
 } from '../../preferences/values.ts';
-import { type FieldForm, hintClass, TextField } from './fields.tsx';
+import {
+  controlClass,
+  type FieldForm,
+  hintClass,
+  PreferenceTextInput,
+  SettingsRow,
+} from './fields.tsx';
+
+const sideLabels = {
+  paddingTop: 'top',
+  paddingRight: 'right',
+  paddingBottom: 'bottom',
+  paddingLeft: 'left',
+} as const;
 
 export function PaddingFields({ form }: { form: FieldForm }) {
   const { t } = form;
-  const hintId = React.useId();
+  const id = React.useId();
+  const hintId = `${id}-hint`;
   return (
-    <section
-      aria-label={t('padding')}
-      className="rio:grid rio:min-w-0 rio:gap-3"
+    <SettingsRow
+      label={<span id={id}>{t('padding')}</span>}
+      description={
+        <span id={hintId}>
+          {t('paddingHelp')} {t('integerRange')}: {paddingRange.join('–')} px.
+        </span>
+      }
     >
-      <div className="rio:grid rio:gap-1">
-        <h4 className="rio:m-0 rio:text-base rio:font-semibold">
-          {t('padding')}
-        </h4>
-        <p id={hintId} className={hintClass}>
-          {t('paddingHelp')} {t('integerRange')}: {paddingRange.join('–')}.
-        </p>
-      </div>
-      <div className="rio:grid rio:min-w-0 rio:max-w-2xl rio:grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] rio:gap-3">
+      <fieldset
+        aria-labelledby={id}
+        className="rio:m-0 rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,3.25rem),1fr))] rio:gap-1.5 rio:border-0 rio:p-0"
+      >
         {paddingFields.map((name) => (
-          <TextField
-            key={name}
-            form={form}
-            name={name}
-            fallback={String(preferenceDefaults[name])}
-            range={paddingRange}
-            sharedRangeHintId={hintId}
-          />
+          <div key={name} className="rio:grid rio:min-w-0 rio:gap-0.5">
+            <label htmlFor={`${id}-${name}`} className={hintClass}>
+              {t(sideLabels[name])}
+            </label>
+            <PreferenceTextInput
+              form={form}
+              id={`${id}-${name}`}
+              name={name}
+              placeholder={form.base[name] ?? String(preferenceDefaults[name])}
+              inputMode="numeric"
+              autoComplete="off"
+              aria-label={t(name)}
+              aria-describedby={hintId}
+              aria-invalid={form.invalid.includes(name) || undefined}
+              className={controlClass}
+            />
+          </div>
         ))}
-      </div>
-    </section>
+      </fieldset>
+    </SettingsRow>
   );
 }

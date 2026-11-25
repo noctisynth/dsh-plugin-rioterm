@@ -92,9 +92,29 @@ test('padding defaults and overrides resolve per edge; zero is a value and omiss
   }
 });
 
+test('appearance forwards the requested bold-bright mode without pinning the palette or resolving auto', () => {
+  const fonts = { fontFamily: 'monospace', fontSize: 13 };
+  for (const ansiPreset of ['rio', 'dsh']) {
+    assert.equal(
+      resolvePreferences({ ansiPreset }, fonts, 0).boldBright,
+      'auto',
+    );
+    for (const boldBright of ['auto', 'always', 'never']) {
+      const request = { boldBright, ansiPreset };
+      assert.deepEqual(validatedOverrides(request), request);
+      const appearance = resolvePreferences(readOverrides(request), fonts, 0);
+      assert.equal(appearance.boldBright, boldBright);
+      assert.equal(appearance.ansiPreset, ansiPreset);
+    }
+  }
+});
+
 test('reject malformed drafts; isolate invalid persisted fields rather than losing all overrides', () => {
   const bad = [
     { renderer: 'webgl' },
+    { ansiPreset: 'automatic' },
+    { boldBright: 'inherit' },
+    { boldBright: true },
     { fontFamily: 'url(https://invalid.test)' },
     { fontFamily: 'x; color:red' },
     { foreground: 'red; display:none' },

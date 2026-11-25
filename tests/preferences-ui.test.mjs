@@ -6,6 +6,7 @@ import TestRenderer from 'react-test-renderer';
 import { compileUiStyles } from '../build/ui-styles.ts';
 import { validateFields } from '../src/pages/preferences/draft.ts';
 import { preferenceMessages } from '../src/pages/preferences/messages.ts';
+import { PreferenceAutosave } from '../src/pages/preferences/preference-autosave.ts';
 import { ansiNames, colorFields } from '../src/preferences/values.ts';
 
 // Render the real React 18 components against the editor contract, never a shell or a browser.
@@ -63,15 +64,25 @@ class Editor {
   }
 }
 
+function clock(tc) {
+  tc.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  return (ms) => act(async () => tc.mock.timers.tick(ms));
+}
+
+const settled = () => act(async () => {});
+
 function mount(test, editor, options, t = translate) {
   let tree;
-  const element = (hostFonts = fonts) =>
-    React.createElement(PreferencesPage, { editor, hostFonts, t });
+  const draft = new PreferenceAutosave(editor);
+  const disconnect = draft.connect();
+  const element = (hostFonts = fonts, locale = t) =>
+    React.createElement(PreferencesPage, { draft, hostFonts, t: locale });
   act(() => {
     tree = TestRenderer.create(element(), options);
   });
   test.after(() => {
     act(() => tree.unmount());
+    disconnect();
     assert.equal(editor.listeners.size, 0);
   });
   const byName = (name) =>
@@ -110,16 +121,13 @@ function mount(test, editor, options, t = translate) {
     toggle: (name, checked) => event(field(name), { checked }),
     publish: (delta) => act(() => editor.publish(delta)),
     updateFonts: (hostFonts) => act(() => tree.update(element(hostFonts))),
-    save: () =>
-      act(async () => {
-        const el = button(t('save'));
-        assert.ok(!el.props.disabled);
-        el.props.onClick();
-      }),
+    updateLocale: (locale) => act(() => tree.update(element(fonts, locale))),
+    blur: (name) => act(() => field(name).props.onBlur()),
   };
 }
 
 test('fonts start independently inherited; a clean form follows Host changes without writing an effective value', async (tc) => {
+  const tick = clock(tc);
   const editor = new Editor({
     base: { fontSize: 19, foreground: '#def' },
     value: { fontSize: 19, fontFamily: fonts.fontFamily, foreground: '#def' },
@@ -141,8 +149,9 @@ test('fonts start independently inherited; a clean form follows Host changes wit
   view.input('fontFamily', 'url(untrusted)');
   assert.deepEqual(sample(), { fontFamily: fonts.fontFamily, fontSize: 19 });
   assert.ok(JSON.stringify(view.tree.toJSON()).includes(en.fontFallback));
-  view.click(en.cancel);
-  assert.equal(view.button(en.save).props.disabled, true);
+  assert.equal(view.status(), en.invalidStatus);
+  view.click(en.discard);
+  assert.equal(view.button('Save'), undefined);
   assert.equal(view.status(), en.saved);
   view.input('fontFamily', '思源等宽, monospace');
   view.updateFonts({ fontFamily: '新等宽, monospace', fontSize: 17 });
@@ -153,9 +162,9 @@ test('fonts start independently inherited; a clean form follows Host changes wit
   view.input('fontSize', '');
   assert.equal(sample().fontSize, 19);
   assert.equal(view.field('fontFamily').props.placeholder, '新等宽, monospace');
-  assert.equal(view.status(), en.unsaved);
+  assert.equal(view.status(), en.pending);
   assert.deepEqual(editor.writes, []);
-  await view.save();
+  await tick(600);
   assert.deepEqual(editor.writes, [
     { revision: 7, next: { fontFamily: '"思源等宽", monospace' } },
   ]);
@@ -165,7 +174,8 @@ test('fonts start independently inherited; a clean form follows Host changes wit
   assert.equal(view.field('fontSize').props.value, '20');
 });
 
-test('single-field unsets, zero history, cancel and restore are staged until Save', async (tc) => {
+test('typed blank waits for debounce, but inherit buttons apply immediately; restore requires a second explicit click', async (tc) => {
+  const tick = clock(tc);
   const editor = new Editor({
     user: { fontFamily: 'monospace', fontSize: 20, altIsMeta: false },
     base: { altIsMeta: true },
@@ -173,36 +183,161 @@ test('single-field unsets, zero history, cancel and restore are staged until Sav
   const view = mount(tc, editor);
   view.input('fontSize', '');
   view.input('scrollback', '0');
+  await tick(599);
+  assert.deepEqual(editor.writes, []);
   view.click(`${en.useInherited}: ${en.altIsMeta}`);
   assert.equal(view.field('altIsMeta').props.checked, true);
-  view.click(en.cancel);
-  assert.equal(view.field('fontSize').props.value, '20');
-  assert.equal(view.field('scrollback').props.value, '');
-  assert.equal(view.field('altIsMeta').props.checked, false);
-  view.input('fontSize', '');
-  view.input('scrollback', '0');
-  await view.save();
   assert.deepEqual(editor.writes[0], {
     revision: 7,
-    next: { fontFamily: 'monospace', altIsMeta: false, scrollback: 0 },
+    next: { fontFamily: 'monospace', fontSize: 20 },
+  });
+  await settled();
+  await tick(1);
+  assert.deepEqual(editor.writes[1], {
+    revision: 8,
+    next: { fontFamily: 'monospace', scrollback: 0 },
   });
   view.click(en.restore);
-  assert.equal(view.field('fontFamily').props.value, '');
-  assert.equal(view.field('scrollback').props.value, '');
-  view.click(en.cancel);
+  assert.ok(view.button(en.confirmRestore));
   assert.equal(view.field('scrollback').props.value, '0');
+  await tick(6000);
+  view.click(en.keepSettings);
+  assert.equal(view.button(en.confirmRestore), undefined);
+  assert.equal(editor.writes.length, 2);
   view.click(en.restore);
-  assert.equal(editor.writes.length, 1);
-  await view.save();
-  assert.deepEqual(editor.writes[1], { revision: 8, next: {} });
+  view.click(en.confirmRestore);
+  assert.deepEqual(editor.writes[2], { revision: 9, next: {} });
+  await settled();
+  assert.equal(view.field('fontFamily').props.value, '');
+  assert.equal(
+    view.field('fontSize').props.placeholder,
+    String(fonts.fontSize),
+  );
 });
 
-test('padding is visible outside disclosures in both locales, with labeled units, range and rendered defaults', (tc) => {
+function enclosingSections(node) {
+  const sections = [];
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (parent.type === 'details') sections.push(parent);
+  }
+  return sections;
+}
+
+function sectionTitle(section) {
+  const summary = section.children[0];
+  assert.equal(summary.type, 'summary');
+  return summary
+    .findByProps({ id: summary.props['aria-labelledby'] })
+    .children.join('');
+}
+
+test('four localized group headings and common settings are visible; only detailed color and Canvas controls need disclosure', (tc) => {
+  for (const copy of Object.values(preferenceMessages)) {
+    const view = mount(
+      tc,
+      new Editor({ user: { renderer: 'canvas', predictiveEcho: true } }),
+      undefined,
+      (key) => copy[key],
+    );
+    const groups = view.tree.root
+      .findByType('fieldset')
+      .findAllByType('section', { deep: false });
+    assert.deepEqual(
+      groups.map((group) =>
+        group
+          .findByProps({ id: group.props['aria-labelledby'] })
+          .children.join(''),
+      ),
+      [copy.fontLayout, copy.colors, copy.interaction, copy.rendering],
+    );
+    const visibleFields = [
+      [
+        'fontFamily',
+        'fontSize',
+        'lineHeight',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft',
+        'fit',
+      ],
+      ['ansiPreset', 'boldBright'],
+      ['scrollback', 'altIsMeta', 'detectUrls', 'autoFocus'],
+      ['renderer'],
+    ];
+    for (const [index, names] of visibleFields.entries()) {
+      assert.deepEqual(enclosingSections(groups[index]), []);
+      assert.equal(
+        groups[index].findByProps({
+          id: groups[index].props['aria-labelledby'],
+        }).type,
+        'h4',
+      );
+      for (const name of names) {
+        const field = view.field(name);
+        assert.ok(groups[index].findAll((node) => node === field).length, name);
+        assert.deepEqual(enclosingSections(field), [], name);
+      }
+    }
+    const [baseColors] = enclosingSections(view.field(colorFields[0]));
+    const [ansiColors] = enclosingSections(view.field(ansiNames[0]));
+    assert.notEqual(baseColors, ansiColors);
+    for (const [names, details] of [
+      [colorFields, baseColors],
+      [ansiNames, ansiColors],
+    ]) {
+      assert.ok(groups[1].findAllByType('details').includes(details));
+      for (const name of names)
+        assert.deepEqual(enclosingSections(view.field(name)), [details]);
+    }
+    for (const name of [
+      'cursorStyle',
+      'predictiveEcho',
+      'latencyThreshold',
+      'predictionStyle',
+    ]) {
+      assert.deepEqual(enclosingSections(view.field(name)).map(sectionTitle), [
+        copy.canvasControls,
+      ]);
+    }
+    assert.deepEqual(enclosingSections(view.button(copy.restore)), []);
+    assert.equal(view.status(), copy.saved);
+  }
+});
+
+test('editing, host changes and locale switches reuse the same disclosure and input nodes', (tc) => {
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  const field = view.field('fontSize');
+  const [disclosure] = enclosingSections(view.field('brightWhite'));
+  view.input('fontSize', '23');
+  view.publish({ revision: 8, user: { scrollback: 1024 } });
+  view.updateFonts({ fontFamily: 'monospace', fontSize: 20 });
+  view.updateLocale((key) => preferenceMessages.zh[key]);
+  assert.equal(view.field('fontSize'), field);
+  assert.equal(enclosingSections(view.field('brightWhite'))[0], disclosure);
+  assert.deepEqual(enclosingSections(field), []);
+  assert.equal(disclosure.props.open, undefined);
+  assert.equal(field.props.value, '23');
+  assert.ok(view.button(preferenceMessages.zh.keepEdits));
+  assert.deepEqual(editor.writes, []);
+});
+
+test('padding is always visible in both locales, with labeled units, range and rendered defaults', (tc) => {
   for (const copy of Object.values(preferenceMessages)) {
     const view = mount(tc, new Editor(), undefined, (key) => copy[key]);
-    const section = view.tree.root.findByProps({ 'aria-label': copy.padding });
-    for (let node = section; node; node = node.parent)
-      assert.notEqual(node.type, 'details');
+    const section = view.tree.root
+      .findAllByType('fieldset')
+      .find(
+        (group) =>
+          group.props['aria-labelledby'] &&
+          group.findAllByProps({ name: 'paddingTop', type: 'text' }).length,
+      );
+    const groupLabel = view.tree.root.findByProps({
+      id: section.props['aria-labelledby'],
+    });
+    assert.equal(groupLabel.children.join(''), copy.padding);
+    assert.deepEqual(enclosingSections(section), []);
     for (const [name, fallback] of Object.entries({
       paddingTop: '16',
       paddingRight: '8',
@@ -214,9 +349,16 @@ test('padding is visible outside disclosures in both locales, with labeled units
       assert.equal(props.placeholder, fallback);
       assert.equal(props.inputMode, 'numeric');
       const label = section.findByProps({ htmlFor: props.id });
-      assert.equal(label.children.join(''), copy[name]);
+      assert.ok(
+        props['aria-label']
+          .toLowerCase()
+          .includes(label.children.join('').toLowerCase()),
+      );
+      assert.equal(props['aria-label'], copy[name]);
       assert.match(copy[name], /px/);
-      const hint = section.findByProps({ id: props['aria-describedby'] });
+      const hint = view.tree.root.findByProps({
+        id: props['aria-describedby'],
+      });
       assert.ok(hint.children.join('').includes(copy.paddingHelp));
       assert.match(hint.children.join(''), /0–64/);
     }
@@ -224,6 +366,7 @@ test('padding is visible outside disclosures in both locales, with labeled units
 });
 
 test('padding saves only edited sides, including zero; clear and restore use the inherited spacing', async (tc) => {
+  const tick = clock(tc);
   const editor = new Editor({ base: { paddingBottom: 0, paddingLeft: 23 } });
   const view = mount(tc, editor);
   assert.equal(view.field('paddingBottom').props.placeholder, '0');
@@ -232,7 +375,7 @@ test('padding saves only edited sides, including zero; clear and restore use the
   view.input('paddingRight', '64');
   view.input('paddingLeft', '31');
   assert.deepEqual(editor.writes, []);
-  await view.save();
+  await tick(600);
   assert.deepEqual(editor.writes[0].next, {
     paddingTop: 0,
     paddingRight: 64,
@@ -241,26 +384,23 @@ test('padding saves only edited sides, including zero; clear and restore use the
   assert.equal(view.field('paddingTop').props.value, '0');
   view.input('paddingRight', '');
   view.input('paddingBottom', '12');
-  await view.save();
+  await tick(600);
   assert.deepEqual(editor.writes[1].next, {
     paddingTop: 0,
     paddingBottom: 12,
     paddingLeft: 31,
   });
   view.click(en.restore);
+  view.click(en.confirmRestore);
+  await settled();
   assert.equal(view.field('paddingTop').props.value, '');
   assert.equal(view.field('paddingTop').props.placeholder, '16');
   assert.equal(view.field('paddingLeft').props.placeholder, '23');
-  view.click(en.cancel);
-  assert.equal(view.field('paddingTop').props.value, '0');
-  assert.equal(view.field('paddingLeft').props.value, '31');
-  view.click(en.restore);
-  assert.equal(editor.writes.length, 2);
-  await view.save();
   assert.deepEqual(editor.writes[2].next, {});
 });
 
-test('invalid padding stays editable, names the side in the error summary, and blocks saving', (tc) => {
+test('invalid padding stays editable and is named in the error summary; blur never sends it', async (tc) => {
+  const tick = clock(tc);
   const editor = new Editor();
   const view = mount(tc, editor);
   for (const [name, value] of Object.entries({
@@ -272,16 +412,16 @@ test('invalid padding stays editable, names the side in the error summary, and b
     view.input(name, value);
     assert.equal(view.field(name).props.value, value);
     assert.equal(view.field(name).props['aria-invalid'], true);
+    const summary = view.tree.root.findByProps({ 'aria-label': en.invalid });
+    assert.deepEqual(enclosingSections(summary), []);
     assert.ok(
-      view.tree.root
-        .findAllByType('p')
-        .some((node) =>
-          node.children.join('').includes(`${en.invalid}: ${en[name]}`),
-        ),
+      summary
+        .findAllByType('button')
+        .some((button) => button.children.join('') === en[name]),
     );
-    const save = view.button(en.save);
-    assert.equal(save.props.disabled, true);
-    act(() => save.props.onClick());
+    assert.equal(view.status(), en.invalidStatus);
+    view.blur(name);
+    await tick(600);
     assert.deepEqual(editor.writes, []);
     view.input(name, '');
     assert.equal(view.field(name).props['aria-invalid'], undefined);
@@ -302,18 +442,26 @@ test('Canvas-only controls follow the draft renderer and echo; hiding them does 
   ])
     assert.deepEqual(view.byName(key), []);
   view.input('renderer', '');
+  assert.deepEqual(editor.writes[0], {
+    revision: 7,
+    next: { cursorStyle: 'bar' },
+  });
+  await settled();
   assert.equal(view.field('cursorStyle').props.value, 'bar');
   assert.equal(view.field('predictiveEcho').props.checked, false);
   assert.deepEqual(view.byName('latencyThreshold'), []);
   view.toggle('predictiveEcho', true);
+  await settled();
   view.input('latencyThreshold', '0');
+  view.blur('latencyThreshold');
+  await settled();
   view.input('predictionStyle', 'dim');
   view.toggle('autoFocus', true);
   view.toggle('fit', false);
   view.input('renderer', 'dom');
   assert.deepEqual(view.byName('predictionStyle'), []);
-  await view.save();
-  assert.deepEqual(editor.writes[0].next, {
+  await settled();
+  assert.deepEqual(editor.writes.at(-1).next, {
     renderer: 'dom',
     cursorStyle: 'bar',
     predictiveEcho: true,
@@ -325,7 +473,48 @@ test('Canvas-only controls follow the draft renderer and echo; hiding them does 
   view.input('renderer', 'canvas');
   assert.equal(view.field('predictionStyle').props.value, 'dim');
   assert.equal(view.field('latencyThreshold').props.value, '0');
+  await settled();
   assert.match(en.echoHint, /password/);
+});
+
+test('bold bright exposes localized scope and saves explicit auto separately from inheritance', async (tc) => {
+  for (const copy of Object.values(preferenceMessages)) {
+    const user = { ansiPreset: 'dsh', palette: palette({ 12: '#abc' }) };
+    const editor = new Editor({ base: { boldBright: 'never' }, user });
+    const view = mount(tc, editor, undefined, (key) => copy[key]);
+    const field = view.field('boldBright');
+    assert.equal(field.props.value, '');
+    const label = view.tree.root.findByProps({ htmlFor: field.props.id });
+    assert.equal(label.children.join(''), copy.boldBright);
+    const hint = view.tree.root.findByProps({
+      id: field.props['aria-describedby'],
+    });
+    assert.equal(hint.children.join(''), copy.boldBrightHint);
+    assert.match(copy.boldBrightHint, /0–7/);
+    assert.deepEqual(
+      field
+        .findAllByType('option')
+        .map((node) => [node.props.value, node.children.join('')]),
+      [
+        ['', `${copy.inherited}: ${copy.never}`],
+        ['auto', copy.auto],
+        ['always', copy.always],
+        ['never', copy.never],
+      ],
+    );
+    assert.deepEqual(editor.writes, []);
+    view.input('boldBright', 'auto');
+    assert.deepEqual(editor.writes, [
+      { revision: 7, next: { ...user, boldBright: 'auto' } },
+    ]);
+    await settled();
+    assert.equal(field.props.value, 'auto');
+    view.input('boldBright', '');
+    assert.deepEqual(editor.writes[1], { revision: 8, next: user });
+    await settled();
+    assert.equal(field.props.value, '');
+    assert.equal(view.status(), copy.saved);
+  }
 });
 
 test('colors offer native pickers and optional alpha hex; clearing one ANSI cell never pins the rest', async (tc) => {
@@ -343,6 +532,10 @@ test('colors offer native pickers and optional alpha hex; clearing one ANSI cell
   assert.equal(view.field('blue').props.value, '');
   assert.equal(view.field('blue').props.placeholder, '#abc');
   view.click(`${en.clear}: 2 · ${en.green}`);
+  assert.deepEqual(editor.writes[0].next, {
+    palette: palette({ 1: '#ff00ff80' }),
+  });
+  await settled();
   view.input('selectionBackground', '#abcd');
   const selected = pickers.find(
     (node) =>
@@ -352,31 +545,35 @@ test('colors offer native pickers and optional alpha hex; clearing one ANSI cell
   assert.equal(selected.props.value, '#aabbcc');
   view.event(selected, { value: '#112233' });
   assert.equal(view.field('selectionBackground').props.value, '#112233dd');
-  await view.save();
-  assert.deepEqual(editor.writes[0].next, {
+  assert.equal(editor.writes.length, 2);
+  await settled();
+  assert.deepEqual(editor.writes[1].next, {
     selectionBackground: '#112233dd',
     palette: palette({ 1: '#ff00ff80' }),
   });
   view.input('red', '');
+  assert.equal(editor.writes.length, 2);
+  view.blur('red');
+  await settled();
   const transparent = pickers.find(
     (node) =>
       node.props['aria-label'] === `${en.chooseColor}: ${en.foreground}`,
   );
   assert.equal(transparent.props.value, '#aabbcc');
-  const opacity = view.tree.root.findByProps({
-    id: transparent.props['aria-describedby'],
-  });
-  assert.equal(opacity.children.join(''), `${en.opacity}: 0%`);
+  const descriptions = transparent.props['aria-describedby']
+    .split(' ')
+    .map((id) => view.tree.root.findByProps({ id }).children.join(''));
+  assert.ok(descriptions.includes(`${en.opacity}: 0%`));
   view.event(transparent, { value: '#778899' });
   assert.equal(view.field('foreground').props.value, '#77889900');
-  await view.save();
-  assert.deepEqual(editor.writes[1].next, {
+  await settled();
+  assert.deepEqual(editor.writes[3].next, {
     foreground: '#77889900',
     selectionBackground: '#112233dd',
   });
 });
 
-test('dirty revisions retain the draft; reapplying merges individual fields/cells without writing or clobbering unrelated changes', async (tc) => {
+test('dirty revisions retain the draft; reapplying merges individual fields/cells and saves them without clobbering unrelated changes', async (tc) => {
   const editor = new Editor({
     user: { fontSize: 18, palette: palette({ 1: '#111' }) },
   });
@@ -393,12 +590,12 @@ test('dirty revisions retain the draft; reapplying merges individual fields/cell
   });
   assert.equal(view.field('fontSize').props.value, '21');
   assert.equal(view.field('red').props.value, '');
-  assert.equal(view.button(en.save).props.disabled, true);
+  assert.equal(view.status(), en.conflict);
+  assert.deepEqual(editor.writes, []);
   view.click(en.keepEdits);
   assert.equal(view.field('scrollback').props.value, '123');
   assert.equal(view.field('green').props.value, '#333');
-  assert.deepEqual(editor.writes, []);
-  await view.save();
+  await settled();
   assert.deepEqual(editor.writes, [
     {
       revision: 8,
@@ -407,12 +604,13 @@ test('dirty revisions retain the draft; reapplying merges individual fields/cell
   ]);
   view.input('fontSize', '22');
   view.publish({ revision: 10, user: { fontSize: 16 } });
-  view.click(en.cancel);
+  view.click(en.discard);
   assert.equal(view.field('fontSize').props.value, '16');
   assert.equal(view.status(), en.saved);
 });
 
 test('loading, read-only, outstanding writes, rejection and transport errors never silently lose edits', async (tc) => {
+  const tick = clock(tc);
   const editor = new Editor({
     status: 'loading',
     writable: false,
@@ -432,22 +630,23 @@ test('loading, read-only, outstanding writes, rejection and transport errors nev
     new Promise((resolve) => {
       finish = resolve;
     });
-  const action = view.button(en.save).props.onClick;
-  act(() => {
-    action();
-    action();
-  });
+  view.blur('fontSize');
   assert.equal(view.status(), en.saving);
-  assert.equal(view.button(en.cancel).props.disabled, true);
-  assert.equal(view.tree.root.findByType('fieldset').props.disabled, true);
+  assert.equal(view.tree.root.findByType('fieldset').props.disabled, false);
+  view.input('fontSize', '23');
+  assert.equal(view.field('fontSize').props.value, '23');
   assert.equal(editor.writes.length, 1);
   await act(async () => finish(false));
   assert.ok(JSON.stringify(view.tree.toJSON()).includes(en.rejected));
-  assert.equal(view.field('fontSize').props.value, '22');
+  assert.equal(view.status(), en.failed);
+  assert.equal(view.field('fontSize').props.value, '23');
+  await tick(1200);
+  assert.equal(editor.writes.length, 1);
   editor.reply = async () => {
     throw new Error('Host offline');
   };
-  await view.save();
+  view.click(en.retry);
+  await settled();
   assert.ok(JSON.stringify(view.tree.toJSON()).includes('Host offline'));
   view.publish({
     status: 'unavailable',
@@ -456,12 +655,13 @@ test('loading, read-only, outstanding writes, rejection and transport errors nev
     user: {},
   });
   assert.ok(view.status().includes(en.unavailable));
-  assert.equal(view.field('fontSize').props.value, '22');
-  assert.equal(view.button(en.save).props.disabled, true);
+  assert.equal(view.field('fontSize').props.value, '23');
+  assert.equal(view.tree.root.findByType('fieldset').props.disabled, true);
   assert.equal(editor.writes.length, 2);
 });
 
 test('unfinished or invalid values remain editable, but never reach the host', async (tc) => {
+  const tick = clock(tc);
   for (const [key, values] of Object.entries({
     fontFamily: ['url(untrusted)', 'a; b'],
     fontSize: ['0', '7', '49', '12.5', '0x10'],
@@ -483,13 +683,45 @@ test('unfinished or invalid values remain editable, but never reach the host', a
   view.input('fontSize', '1e');
   assert.equal(view.field('fontSize').props.value, '1e');
   assert.equal(view.field('fontSize').props['aria-invalid'], true);
-  const save = view.button(en.save);
-  assert.equal(save.props.disabled, true);
-  act(() => save.props.onClick());
+  await tick(600);
+  assert.equal(view.status(), en.invalidStatus);
   assert.deepEqual(editor.writes, []);
   view.input('fontSize', '12');
-  await view.save();
+  view.blur('fontSize');
+  await settled();
   assert.deepEqual(editor.writes[0].next, { fontSize: 12 });
+});
+
+test('reviewing an invalid ANSI slot opens its disclosure before focusing, without changing the draft', (tc) => {
+  const paletteSection = { open: false };
+  let focused = false;
+  const editor = new Editor();
+  const view = mount(tc, editor, {
+    createNodeMock: ({ type }) =>
+      type === 'fieldset'
+        ? {
+            contains: (node) => node === paletteSection,
+            querySelector: (selector) => {
+              assert.equal(selector, '[name="brightWhite"]');
+              return {
+                closest: () => paletteSection,
+                focus: () => {
+                  assert.ok(paletteSection.open);
+                  focused = true;
+                },
+              };
+            },
+          }
+        : null,
+  });
+  view.input('scrollback', '11');
+  view.input('brightWhite', '#X');
+  assert.equal(focused, false);
+  view.click(en.brightWhite);
+  assert.equal(focused, true);
+  assert.equal(view.field('brightWhite').props.value, '#X');
+  assert.equal(view.field('scrollback').props.value, '11');
+  assert.deepEqual(editor.writes, []);
 });
 
 test('a hidden invalid threshold can be undone in place without losing other edits or persisting its inherited value', async (tc) => {
@@ -502,15 +734,17 @@ test('a hidden invalid threshold can be undone in place without losing other edi
     const editor = new Editor({ user, base: { latencyThreshold: 90 } });
     const view = mount(tc, editor);
     view.input('predictionStyle', 'dim');
+    await settled();
     view.input('latencyThreshold', '9999');
     if (hide === 'renderer') view.input('renderer', 'dom');
     else view.toggle('predictiveEcho', false);
     assert.deepEqual(view.byName('latencyThreshold'), []);
-    assert.equal(view.button(en.save).props.disabled, true);
+    await settled();
+    assert.equal(view.status(), en.invalidStatus);
     view.click(en.undoLatency);
-    assert.deepEqual(editor.writes, []);
-    await view.save();
-    assert.deepEqual(editor.writes[0].next, {
+    await settled();
+    assert.equal(view.status(), en.saved);
+    assert.deepEqual(editor.writes.at(-1).next, {
       ...user,
       [hide]: hide === 'renderer' ? 'dom' : false,
       predictionStyle: 'dim',
@@ -518,7 +752,93 @@ test('a hidden invalid threshold can be undone in place without losing other edi
   }
 });
 
-test('explicit one-field resets and conflict resolution restore focus; incoming snapshots do not move it', (tc) => {
+test('IME candidates stay local across debounce and blur; only the committed family is saved', async (tc) => {
+  const tick = clock(tc);
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  const field = view.field('fontFamily');
+  view.blur('fontFamily');
+  act(() => field.props.onCompositionStart({ currentTarget: { value: '' } }));
+  view.input('fontFamily', 'xia');
+  view.blur('fontFamily');
+  await tick(1200);
+  assert.equal(field.props.value, 'xia');
+  assert.deepEqual(editor.writes, []);
+  act(() =>
+    field.props.onCompositionEnd({ currentTarget: { value: '霞鹜文楷' } }),
+  );
+  assert.equal(view.status(), en.pending);
+  await tick(600);
+  assert.deepEqual(editor.writes, [
+    { next: { fontFamily: '"霞鹜文楷"' }, revision: 7 },
+  ]);
+});
+
+test('a focused field keeps the typed spelling across canonical acknowledgements but follows genuinely different settings', async (tc) => {
+  const tick = clock(tc);
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  const input = view.field('lineHeight');
+  act(() => input.props.onFocus());
+  view.input('lineHeight', '1.');
+  await tick(600);
+  assert.deepEqual(editor.writes, [{ revision: 7, next: { lineHeight: 1 } }]);
+  assert.equal(input.props.value, '1.');
+  view.input('lineHeight', '1.25');
+  await tick(600);
+  assert.equal(editor.writes[1].next.lineHeight, 1.25);
+  view.publish({ revision: 10, user: { lineHeight: 2 } });
+  assert.equal(input.props.value, '2');
+  view.blur('lineHeight');
+  assert.equal(editor.writes.length, 2);
+});
+
+test('IME holds pending padding and never saves a numeric candidate; other fields can still save', async (tc) => {
+  const tick = clock(tc);
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  const input = view.field('paddingTop');
+  view.input('paddingTop', '1');
+  act(() => input.props.onCompositionStart({ currentTarget: { value: '1' } }));
+  view.input('paddingTop', '12');
+  view.blur('paddingTop');
+  view.input('paddingLeft', '4');
+  await tick(800);
+  assert.deepEqual(editor.writes, [{ revision: 7, next: { paddingLeft: 4 } }]);
+  act(() => input.props.onCompositionEnd({ currentTarget: { value: '20' } }));
+  await tick(600);
+  assert.deepEqual(editor.writes[1], {
+    revision: 8,
+    next: { paddingLeft: 4, paddingTop: 20 },
+  });
+});
+
+test('hiding a composing Canvas field resumes only its last committed edit', async (tc) => {
+  const tick = clock(tc);
+  const editor = new Editor({
+    user: { renderer: 'canvas', predictiveEcho: true },
+  });
+  const view = mount(tc, editor);
+  const input = view.field('latencyThreshold');
+  view.input('latencyThreshold', '100');
+  act(() =>
+    input.props.onCompositionStart({ currentTarget: { value: '100' } }),
+  );
+  view.input('latencyThreshold', '105');
+  view.input('renderer', 'dom');
+  await settled();
+  assert.deepEqual(view.byName('latencyThreshold'), []);
+  await tick(600);
+  assert.deepEqual(
+    editor.writes.map(({ next }) => next),
+    [
+      { renderer: 'dom', predictiveEcho: true },
+      { renderer: 'dom', predictiveEcho: true, latencyThreshold: 100 },
+    ],
+  );
+});
+
+test('explicit clear restores focus; typing, successful autosave and external updates leave focus alone', async (tc) => {
   const focused = [];
   const editor = new Editor({
     user: { detectUrls: false, foreground: '#ABC' },
@@ -529,14 +849,19 @@ test('explicit one-field resets and conflict resolution restore focus; incoming 
     }),
   });
   view.click(`${en.useInherited}: ${en.detectUrls}`);
+  await settled();
   view.click(`${en.clear}: ${en.foreground}`);
-  view.publish({
-    revision: 8,
-    user: { detectUrls: false, foreground: '#ABC', fontSize: 22 },
-  });
+  await settled();
   assert.deepEqual(focused, ['detectUrls', 'foreground']);
-  view.click(en.keepEdits);
+  view.input('fontSize', '20');
+  view.publish({ revision: 10, user: { fontSize: 22 } });
+  assert.deepEqual(focused, ['detectUrls', 'foreground']);
+  view.click(en.reviewIssue);
   assert.deepEqual(focused, ['detectUrls', 'foreground', 'status']);
+  view.click(en.keepEdits);
+  await settled();
+  assert.equal(view.button(en.reviewIssue), undefined);
+  assert.deepEqual(focused, ['detectUrls', 'foreground', 'status', 'status']);
 });
 
 test('standalone scoped page has localized native controls, associated labels and compiled rio: utilities', async (tc) => {
@@ -545,6 +870,20 @@ test('standalone scoped page has localized native controls, associated labels an
     new Editor({ user: { renderer: 'canvas', predictiveEcho: true } }),
   );
   const root = view.tree.root.findByProps({ 'data-rio-ui': 'preferences' });
+  assert.ok(root.props.className.split(' ').includes('rio:@container'));
+  // Every ordinary row uses its panel's width to switch from one column to two.
+  for (const name of [
+    'fontFamily',
+    'paddingTop',
+    'scrollback',
+    'fit',
+    'renderer',
+  ]) {
+    let row = view.field(name).parent;
+    while (row && !row.props.className?.includes('rio:@min-[30rem]:grid-cols-'))
+      row = row.parent;
+    assert.ok(row, `missing responsive row for ${name}`);
+  }
   const elements = root.findAll((node) => typeof node.type === 'string');
   assert.deepEqual(
     Object.keys(en).sort(),
@@ -558,11 +897,24 @@ test('standalone scoped page has localized native controls, associated labels an
       .every((node) => node.props.open === undefined),
   );
   assert.equal(root.findAllByType('textarea').length, 0);
+  const preview = root.findByProps({
+    role: 'img',
+    'aria-label': en.previewColors,
+  });
+  assert.equal(preview.children.length, ansiNames.length);
   const css = await compileUiStyles();
+  assert.match(css, /@container\s*\(.*?30rem/);
   for (const node of [root, ...elements]) {
     if (node.type === 'p' && node.children[0] === en.fontSample)
       assert.deepEqual(node.props.style, fonts);
-    else assert.equal(node.props.style, undefined);
+    else if (node.parent === preview) {
+      assert.equal(node.type, 'span');
+      assert.deepEqual(Object.keys(node.props.style), ['backgroundColor']);
+      assert.match(
+        node.props.style.backgroundColor,
+        /^#[\da-f]{6}([\da-f]{2})?$/i,
+      );
+    } else assert.equal(node.props.style, undefined);
     assert.equal(node.props.autoFocus, undefined);
     if (node.type === 'button') assert.equal(node.props['data-slot'], 'button');
     if (['input', 'select'].includes(node.type) && !node.props['aria-label']) {

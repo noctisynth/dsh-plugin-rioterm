@@ -1,4 +1,6 @@
 import {
+  ansiPresets,
+  boldBrightModes,
   colorFields,
   fontSizeRange,
   latencyRange,
@@ -117,6 +119,22 @@ function assign(
         return;
       }
       break;
+    case 'ansiPreset': {
+      const preset = ansiPresets.find((choice) => choice === v);
+      if (preset) {
+        target.ansiPreset = preset;
+        return;
+      }
+      break;
+    }
+    case 'boldBright': {
+      const mode = boldBrightModes.find((choice) => choice === v);
+      if (mode) {
+        target.boldBright = mode;
+        return;
+      }
+      break;
+    }
     case 'renderer':
       if (v === 'dom' || v === 'canvas') {
         target.renderer = v;

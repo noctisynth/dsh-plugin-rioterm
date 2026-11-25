@@ -70,12 +70,15 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
   assert.equal(styles.size, 1); // Merely loading or materializing the factory installs nothing.
   const noop = () => {};
   const slots = new Map();
+  const locales = new Map();
   const tabTypes = [];
   const closeHandlers = [];
   const disposers = [];
   const operations = [];
   let form = { status: 'loading', writable: false };
   const listeners = new Set();
+  const writes = [];
+  let nextWriteGate;
   const publish = (snapshot) =>
     TestRenderer.act(() => {
       form = snapshot;
@@ -97,7 +100,32 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
             listeners.add(notify);
             return () => listeners.delete(notify);
           },
-          mutate: () => assert.fail('opening the settings page must not write'),
+          mutate: async (ops, revision) => {
+            assert.equal(revision, form.revision);
+            writes.push(structuredClone(ops));
+            if (nextWriteGate) {
+              const gate = nextWriteGate;
+              nextWriteGate = undefined;
+              await gate;
+            }
+            // DSH can accept an override equal to the inherited configuration without
+            // creating a personal entry or advancing the effective-config revision.
+            if (
+              ops.length === 1 &&
+              ops[0].op === 'set' &&
+              ops[0].path[0] === 'fontSize' &&
+              ops[0].value === form.base.fontSize
+            )
+              return true;
+            const user = { ...form.user };
+            for (const op of ops) {
+              if (op.op === 'set') user[op.path[0]] = op.value;
+              else delete user[op.path[0]];
+            }
+            form = { ...form, revision: revision + 1, user, value: user };
+            for (const notify of listeners) notify();
+            return true;
+          },
         };
       },
       // No namespace is advertised when the detail page is first opened.
@@ -118,7 +146,13 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         },
       ),
     },
-    locale: { register: () => noop, bind: () => (key) => key },
+    locale: {
+      register: (namespace, messages) => {
+        locales.set(namespace, messages);
+        return () => locales.delete(namespace);
+      },
+      bind: () => (key) => key,
+    },
     slots: {
       inject: (_name, register) => register(),
       register: (def, render) => {
@@ -154,15 +188,23 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     assert.deepEqual(closeHandlers, ['rio-terminal']);
     const settings = slots.get('plugins.bundle.config');
     assert.equal(settings?.def.key, manifest.name);
-    let settingsView;
-    TestRenderer.act(() => {
-      settingsView = TestRenderer.create(
+    const messages = locales.get(settings.def.locale);
+    const t = (key) => {
+      assert.ok(messages.en[key], `missing English settings copy: ${key}`);
+      assert.ok(messages.zh[key], `missing Chinese settings copy: ${key}`);
+      return messages.zh[key];
+    };
+    const openSettings = () =>
+      TestRenderer.create(
         React.createElement(settings.render, {
           ...settings.def.inject(),
           view: 'page',
-          t: (key) => key,
+          t,
         }),
       );
+    let settingsView;
+    TestRenderer.act(() => {
+      settingsView = openSettings();
     });
     try {
       assert.equal(
@@ -177,39 +219,90 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         settingsView.root.findByProps({ role: 'status' }).children.join('');
       const locked = () =>
         settingsView.root.findByType('fieldset').props.disabled;
-      const save = () =>
-        settingsView.root
-          .findAllByType('button')
-          .find((node) => node.children.join('') === 'save');
-      assert.equal(status(), 'loading');
+      assert.equal(status(), t('loading'));
       assert.equal(locked(), true);
-      assert.equal(save().props.disabled, true);
       publish({ status: 'unavailable', writable: false });
-      assert.equal(status(), 'unavailable');
+      assert.equal(status(), t('unavailable'));
       assert.equal(locked(), true);
-      assert.equal(save().props.disabled, true);
       publish({
         status: 'ready',
         writable: true,
         revision: 1,
+        base: { fontSize: 20 },
         user: {},
-        value: {},
+        value: { fontSize: 20 },
       });
       assert.equal(locked(), false);
+      assert.deepEqual(writes, []); // Opening the page, even across Host events, never writes.
+      const preset = settingsView.root
+        .findAllByType('select')
+        .find((node) => node.props.name === 'ansiPreset');
       const fontSize = settingsView.root
         .findAllByType('input')
         .find((node) => node.props.name === 'fontSize');
-      TestRenderer.act(() =>
-        fontSize.props.onChange({ currentTarget: { value: '17' } }),
+      await TestRenderer.act(async () => {
+        fontSize.props.onChange({ currentTarget: { value: '20' } });
+        fontSize.props.onBlur();
+      });
+      assert.equal(form.revision, 1);
+      assert.deepEqual(form.user, {});
+      await TestRenderer.act(async () => {
+        preset.props.onChange({ currentTarget: { value: 'dsh' } });
+      });
+      assert.deepEqual(writes, [
+        [{ op: 'set', path: ['fontSize'], value: 20 }],
+        [{ op: 'set', path: ['ansiPreset'], value: 'dsh' }],
+      ]);
+      // A second immediate choice queued behind an RPC must survive leaving the page.
+      let release;
+      nextWriteGate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const renderer = settingsView.root
+        .findAllByType('select')
+        .find((node) => node.props.name === 'renderer');
+      TestRenderer.act(() => {
+        preset.props.onChange({ currentTarget: { value: 'rio' } });
+        renderer.props.onChange({ currentTarget: { value: 'canvas' } });
+      });
+      assert.equal(writes.length, 3);
+      TestRenderer.act(() => settingsView.unmount());
+      await TestRenderer.act(async () => {
+        release();
+      });
+      assert.deepEqual(writes[3], [
+        { op: 'set', path: ['renderer'], value: 'canvas' },
+      ]);
+      TestRenderer.act(() => {
+        settingsView = openSettings();
+      });
+      const bold = settingsView.root
+        .findAllByType('select')
+        .find((node) => node.props.name === 'boldBright');
+      assert.deepEqual(
+        bold.findAllByType('option').map((option) => option.props.value),
+        ['', 'auto', 'always', 'never'],
       );
-      assert.equal(save().props.disabled, false);
+      await TestRenderer.act(async () => {
+        bold.props.onChange({ currentTarget: { value: 'always' } });
+      });
+      assert.deepEqual(writes[4], [
+        { op: 'set', path: ['boldBright'], value: 'always' },
+      ]);
+      const reopenedFont = settingsView.root
+        .findAllByType('input')
+        .find((node) => node.props.name === 'fontSize');
+      TestRenderer.act(() =>
+        reopenedFont.props.onChange({ currentTarget: { value: '17' } }),
+      );
+      assert.equal(writes.length, 5); // Typing a valid number doesn't immediately mutate the host.
       publish({ status: 'unavailable', writable: false });
-      assert.equal(save().props.disabled, true);
-      assert.equal(fontSize.props.value, '17'); // The page and its unsaved draft stay mounted.
+      assert.equal(locked(), true);
+      assert.equal(reopenedFont.props.value, '17'); // The page and its unsaved draft stay mounted.
       assert.deepEqual(operations, []); // Visiting the bundle never probes a shell.
     } finally {
       TestRenderer.act(() => settingsView.unmount());
-      assert.equal(listeners.size, 0);
+      assert.equal(listeners.size, 1); // The window owns the queue until the plugin is disposed.
     }
     const slot = slots.get('sidebar.right.tab.guide.entry');
     assert.equal(slot.def.key, manifest.name);
@@ -269,6 +362,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
   } finally {
     for (const dispose of disposers.reverse()) dispose();
   }
+  assert.equal(listeners.size, 0);
   assert.deepEqual([...styles], [foreign]);
   assert.deepEqual(operations, []);
 });

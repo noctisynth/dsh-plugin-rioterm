@@ -244,6 +244,35 @@ test('view changes and late fonts preserve the parsed grid, scroll position, sel
   );
 });
 
+for (const renderer of ['dom', 'canvas']) {
+  test(`${renderer} repaints effective ANSI changes without replacing the grid or proposing a resize`, (t) => {
+    const p = { ...defaults, renderer };
+    const { view, mounted, sizes, inputs, core } = viewport(t, p);
+    core.writable = true;
+    core.write('same grid\x1b[');
+    view.setPreferences({ ...p, boldBright: 'never' }); // Equivalent to auto for Rio.
+    view.setPreferences({ ...p, boldBright: 'always' });
+    view.setPreferences({ ...p, ansiPreset: 'dsh' });
+    view.setPreferences({ ...p, ansiPreset: 'dsh', boldBright: 'always' }); // Equivalent to DSH auto.
+    view.setPreferences({ ...p, ansiPreset: 'dsh', boldBright: 'never' });
+    view.setPreferences(p);
+    assert.deepEqual(
+      mounted.map(({ p }) => [p.ansiPreset, p.boldBright]),
+      [
+        ['rio', 'auto'],
+        ['rio', 'always'],
+        ['dsh', 'auto'],
+        ['dsh', 'never'],
+        ['rio', 'auto'],
+      ],
+    );
+    assert.ok(mounted.every(({ term }) => term === core.term));
+    assert.deepEqual(sizes, []);
+    core.write('6n');
+    assert.deepEqual(inputs, [['\x1b[1;10R', false]]);
+  });
+}
+
 test('fit can stop and resume without resizing locally or letting a hidden/readonly view propose', (t) => {
   const p = { ...defaults, fontSize: 10, lineHeight: 2, fit: false };
   const { core, view, sizes } = viewport(t, p);
