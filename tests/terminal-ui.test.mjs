@@ -19,6 +19,9 @@ const { TerminalGuide } = await jiti.import(
 const { TerminalPage } = await jiti.import(
   '../src/pages/terminal/terminal-page.tsx',
 );
+const { TerminalSearch } = await jiti.import(
+  '../src/pages/terminal/terminal-search.tsx',
+);
 const cssSelectors = new Set();
 let css;
 before(async () => {
@@ -85,6 +88,47 @@ test('search feedback animation and borderless inset utilities compile inside th
       rule.walkDecls('animation', (decl) => reductions.push(decl.value));
   });
   assert.ok(reductions.includes('none'));
+});
+
+test('search uses one themed outer boundary while its input and actions stay borderless', () => {
+  let tree;
+  TestRenderer.act(() => {
+    tree = TestRenderer.create(
+      React.createElement(TerminalSearch, {
+        t: key,
+        status: 'connected',
+        searchRevision: 0,
+        search: assert.fail,
+        clearSearch() {},
+        focusTerminal() {},
+      }),
+    );
+  });
+  try {
+    TestRenderer.act(() => tree.root.findByType('button').props.onClick());
+    const frame = tree.root.findByType('search');
+    for (const token of [
+      'rio:border',
+      'rio:border-solid',
+      'rio:border-border',
+      'rio:bg-background',
+      'rio:shadow-md',
+    ]) {
+      assert.ok(frame.props.className.split(' ').includes(token), token);
+      assertCompiled(token);
+    }
+    for (const node of [
+      tree.root.findByType('input'),
+      ...frame.findAllByType('button'),
+    ]) {
+      const classes = node.props.className.split(' ');
+      assert.ok(classes.includes('rio:border-0'));
+      assert.ok(!classes.includes('rio:border-border'));
+    }
+    assert.match(css, /--dsw-alias-border-l2/);
+  } finally {
+    TestRenderer.act(() => tree.unmount());
+  }
 });
 
 test('component class overrides merge by variant without changing unprefixed host classes', () => {

@@ -49,8 +49,9 @@ export function mountTerminalView(options: ViewOptions): TerminalViewMount {
   function offerFocus() {
     const request = pending;
     if (!request) return;
-    // The sidebar may focus its pane after the activation commit. Finish after
-    // that handoff, not in a later animation frame or on the next PTY output.
+    // DockKit's parent layout effect clears a retained host's inert flag and may
+    // focus its tab chip after our child layout effect. Finish after that handoff,
+    // not in a later animation frame or on the next PTY output.
     queueMicrotask(() => {
       if (pending !== request) return;
       const { active, visible } = options.tabState();

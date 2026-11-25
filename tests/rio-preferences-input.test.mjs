@@ -346,6 +346,45 @@ test('a keyboard activation may leave the composer focused; later interaction ca
   assert.equal(beginAutoFocus(root), undefined);
 });
 
+test('a retained tab activation observes cancellation while its host is still inert and checks visibility only at handoff', async (t) => {
+  for (const mode of [
+    'released',
+    'still inert',
+    'pointerdown',
+    'input',
+    'focusin',
+    'window blur',
+    'hidden document',
+    'readonly',
+  ]) {
+    const { root, core, doc, keyboard, focuses } = keyboardFixture(t);
+    core.writable = true;
+    let inert = true;
+    root.closest = () => (inert ? {} : null);
+    const request = beginAutoFocus(root);
+    assert.ok(request, 'child layout must retain the new tab activation');
+    assert.equal(focuses(), 0);
+    queueMicrotask(() => {
+      const allowed = !request.signal.aborted;
+      request.abort();
+      if (allowed) keyboard.focusIfInteractive();
+    });
+    if (mode !== 'still inert') inert = false;
+    if (mode === 'pointerdown' || mode === 'input' || mode === 'focusin')
+      doc.fire(mode, { target: { contains: () => false } });
+    if (mode === 'window blur') doc.defaultView.fire('blur');
+    if (mode === 'hidden document') doc.hidden = true;
+    if (mode === 'readonly') core.writable = false;
+    await Promise.resolve();
+    assert.equal(focuses(), Number(mode === 'released'), mode);
+    assert.equal(
+      request.signal.aborted,
+      true,
+      'handoff releases its listeners',
+    );
+  }
+});
+
 test('automatic focus requires a visible foreground writer; explicit focus still works on takeover', (t) => {
   for (const blocked of [
     'readonly',

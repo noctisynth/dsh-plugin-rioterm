@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 import { mountTerminalView } from '../src/pages/terminal/terminal-mount.ts';
+import { beginAutoFocus } from '../src/rio/keyboard-input.ts';
 import { ResourceError } from '../src/rio/wasm-loader.ts';
 
 // Exercise the same page lifecycle with deferred ports, not a mock React renderer or a real PTY.
@@ -231,6 +232,71 @@ test('open and each actual selection focus once after the host pane handoff, inc
   await Promise.resolve();
   assert.equal(count(), 3);
   view.dispose();
+});
+
+test('a retained tab may still be inert during child layout; focus waits for the parent handoff without retrying later', async () => {
+  for (const revealedBeforeHandoff of [true, false]) {
+    const f = fixture();
+    let inert = false;
+    const container = {
+      ownerDocument: {
+        hidden: false,
+        hasFocus: () => true,
+        addEventListener() {},
+      },
+      closest: () => (inert ? {} : null),
+    };
+    f.options.beginAutoFocus = () => beginAutoFocus(container);
+    const createScreen = f.options.createScreen;
+    f.options.createScreen = (...args) => {
+      const screen = createScreen(...args);
+      const focus = screen.focusIfInteractive;
+      // The real keyboard binding rechecks inert/visibility at this point.
+      screen.focusIfInteractive = () => {
+        if (!inert) focus();
+      };
+      return screen;
+    };
+    const view = mountTerminalView(f.options);
+    const count = () => f.events.filter((e) => e === 'autofocus').length;
+    f.engine.resolve();
+    f.environment.resolve({});
+    await setImmediate();
+    f.panel.status('connected');
+    await Promise.resolve();
+    assert.equal(count(), 1, 'new tabs still receive their first focus');
+
+    f.tab.active = false;
+    f.tab.visible = false;
+    view.syncTabState();
+    inert = true; // DockKit retains the old tab's DOM with an inert host.
+    f.tab.active = true;
+    f.tab.visible = true;
+    view.syncTabState(); // Rio child layout runs before DockKit parent layout.
+    assert.equal(
+      count(),
+      1,
+      'never focus synchronously into the old inert DOM',
+    );
+    if (revealedBeforeHandoff) inert = false; // Parent layout clears inert.
+    await Promise.resolve();
+    assert.equal(count(), revealedBeforeHandoff ? 2 : 1);
+
+    inert = false;
+    view.syncTabState();
+    f.panel.status('connected');
+    await Promise.resolve();
+    assert.equal(count(), revealedBeforeHandoff ? 2 : 1, 'no late focus retry');
+    f.panel.status('reconnecting');
+    f.panel.status('connected');
+    await Promise.resolve();
+    assert.equal(
+      count(),
+      revealedBeforeHandoff ? 2 : 1,
+      'reconnect never steals focus',
+    );
+    view.dispose();
+  }
 });
 
 test('an interrupted activation never claims a later shell or reconnect, even on duplicate visible notifications', async () => {

@@ -46,8 +46,10 @@ export function beginAutoFocus(
   container: HTMLElement,
 ): AbortController | undefined {
   const doc = container.ownerDocument;
-  if (doc.hidden || !doc.hasFocus() || container.closest(hiddenAncestor))
-    return;
+  // Kept tab bodies run their child layout effects before DockKit clears the
+  // host's old inert flag in its parent layout effect. Observe cancellation now;
+  // focusIfInteractive rechecks actual DOM visibility after that commit handoff.
+  if (doc.hidden || !doc.hasFocus()) return;
   const request = new AbortController();
   const cancel = () => request.abort();
   const events = { capture: true, signal: request.signal };

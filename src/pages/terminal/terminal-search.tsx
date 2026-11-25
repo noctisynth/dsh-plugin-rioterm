@@ -259,7 +259,7 @@ function FindBar({
   return (
     <search
       aria-label={t('findOutput')}
-      className="rio:box-border rio:flex rio:w-[26rem] rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:bg-background rio:p-2 rio:text-foreground rio:shadow-sm"
+      className="rio:box-border rio:flex rio:w-[26rem] rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:p-2 rio:text-foreground rio:shadow-md"
     >
       <div className="rio:relative rio:min-w-0 rio:flex-1">
         <input
