@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Rio terminal",
-    "description": "Open a Rio terminal from the right sidebar to run an interactive user shell in the session’s working directory. The built-in terminal stays available. Customize fonts, colors and input in the Rio plugin details."
+    "description": "Open a Rio terminal from the right sidebar to run an interactive user shell in the session’s working directory."
   }
 }
