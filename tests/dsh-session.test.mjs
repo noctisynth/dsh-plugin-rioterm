@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TerminalWire } from '../src/dsh-protocol.ts';
-import { RioSessions } from '../src/dsh-session.ts';
+import { RioSessions } from '../src/session/registry.ts';
+import { TerminalWire } from '../src/session/wire.ts';
 
 const limits = {
   maxCols: 120,
@@ -265,7 +265,7 @@ test('recovery and close refuse agent-owned or foreign identities, even after hu
   await other.item.mount(undefined, limits, bad).done;
   assert.match(bad.seen.at(-1)[1], /owner/);
   assert.equal(h.views.length, 1);
-  await assert.rejects(other.item.close(), /owner/);
+  await assert.rejects(other.mgr.close(sid, content), /owner/);
   assert.equal(h.closes.length, 0);
 });
 test('bounded uplink, control revocation and protocol responses remain scoped to their attachment', {
@@ -451,10 +451,10 @@ test('closing a recorded but unlisted id tombstones a pending shell and preserve
     ok: false,
     error: { message: 'retry later' },
   });
-  await assert.rejects(item.close(), /retry later/);
+  await assert.rejects(mgr.close(sid, content), /retry later/);
   assert.equal(storage.length, 1);
   h.remote.close = close;
-  await item.close();
+  await mgr.close(sid, content);
   assert.deepEqual(h.closes, h.creates);
   assert.equal(storage.length, 0);
 });

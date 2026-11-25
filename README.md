@@ -10,6 +10,8 @@
 
 ## 本地开发
 
+插件注册、React 页面、会话管理与 Rio 渲染分开维护。修改前可从[终端模块边界与测试索引](.agents/specs/terminal-modules.md)找到对应入口。
+
 使用 pnpm，在仓库根目录运行：
 
 ```sh

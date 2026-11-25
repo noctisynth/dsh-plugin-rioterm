@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { initWasm } from 'rioterm';
-import { TerminalWire } from '../src/dsh-protocol.ts';
-import { RioTerminal } from '../src/rio-terminal.ts';
+import { RioTerminal } from '../src/rio/terminal.ts';
+import { TerminalWire } from '../src/session/wire.ts';
 
 if (!process.env.DSH_INSTALL_DIR || process.platform === 'win32') {
   throw new Error('Run inside a POSIX DSH installation with its runtime.');

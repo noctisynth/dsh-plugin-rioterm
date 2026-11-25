@@ -1,6 +1,6 @@
 import { handleKeyboardEvent, Terminal } from 'rioterm';
 
-export interface RioScreenOptions {
+export interface RioTerminalOptions {
   onInput(data: string, typed: boolean): void;
   onResize(cols: number, rows: number): void;
   cols?: number;
@@ -8,7 +8,6 @@ export interface RioScreenOptions {
   maxCols?: number;
   maxRows?: number;
   scrollback?: number;
-  label?: string;
 }
 
 // Rio 0.1.8 emits both user input and protocol responses synchronously through
@@ -22,13 +21,13 @@ export class RioTerminal {
   visible = true;
   private source: Source = 'silent';
   private stopped = false;
-  private readonly options: RioScreenOptions;
+  private readonly options: RioTerminalOptions;
   private readonly decode = new TextDecoder('utf-8', {
     fatal: true,
     ignoreBOM: true,
   });
 
-  constructor(options: RioScreenOptions) {
+  constructor(options: RioTerminalOptions) {
     this.options = options;
     this.term = this.create(options.cols ?? 80, options.rows ?? 24);
   }
@@ -154,43 +153,5 @@ export class RioTerminal {
       this.stopped = true;
       this.term.dispose();
     }
-  }
-}
-
-// Chromium and WebKit disagree about whether the final input event precedes
-// or follows compositionend. Commit compositionend once; ignore a matching
-// echo only until the next editing gesture. Never send intermediate preedit.
-export class RioTextInput {
-  composing = false;
-  private echo: string | undefined;
-  start(): void {
-    this.composing = true;
-    this.echo = undefined;
-  }
-  key(): void {
-    this.echo = undefined;
-  }
-  reset(): void {
-    this.composing = false;
-    this.echo = undefined;
-  }
-  end(text: string): string {
-    if (!this.composing) return '';
-    this.composing = false;
-    this.echo = text;
-    return text;
-  }
-  input(text: string, type: string, composing: boolean): string {
-    if (composing || this.composing) return '';
-    const duplicate = this.echo === text;
-    this.echo = undefined;
-    if (
-      duplicate ||
-      type === 'insertCompositionText' ||
-      type === 'insertFromComposition' ||
-      type === 'insertFromPaste'
-    )
-      return '';
-    return type.startsWith('insert') ? text : '';
   }
 }

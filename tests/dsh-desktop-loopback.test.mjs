@@ -9,8 +9,8 @@ import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { initWasm } from 'rioterm';
-import { TerminalWire } from '../src/dsh-protocol.ts';
-import { RioTerminal } from '../src/rio-terminal.ts';
+import { RioTerminal } from '../src/rio/terminal.ts';
+import { TerminalWire } from '../src/session/wire.ts';
 
 const desktop = process.versions.electron && process.env.DSH_INSTALL_DIR;
 test('desktop controller and Rio exchange input, resize, screen snapshots and exit over an in-memory carrier', {

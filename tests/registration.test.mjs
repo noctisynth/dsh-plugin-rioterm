@@ -18,6 +18,9 @@ async function loadBundle() {
   runInNewContext(script, {
     TextEncoder,
     TextDecoder,
+    AbortController,
+    setTimeout,
+    clearTimeout,
     crypto: webcrypto,
     localStorage: { length: 0, getItem: () => null },
     window: {
@@ -43,7 +46,10 @@ test('the client registers lazily under the published package name', async () =>
 test('loading the built plugin leaves existing terminals untouched; only its guide button issues a Rio launch ticket', async () => {
   const { factory, manifest } = await loadBundle();
   const client = factory(() => ({
-    createElement: (type, props) => ({ type, props }),
+    createElement: (type, config) => {
+      const { key, ...props } = config ?? {};
+      return { type, key, props };
+    },
   }));
   const noop = () => {};
   const slots = new Map();
@@ -101,13 +107,15 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     const slot = slots.get('sidebar.right.tab.guide.entry');
     assert.equal(slot.def.key, manifest.name);
     const opened = [];
-    const button = slot.render({
+    const guide = slot.render({
       ...slot.def.inject('s'),
       title: 'Rio',
       useTabInfo: () => ({
         tab: { actions: { openTab: (...args) => opened.push(args) } },
       }),
     });
+    assert.equal(guide.props.title, 'Rio');
+    const button = guide.type(guide.props);
     assert.equal(button.type, 'button');
     assert.equal(opened.length, 0);
     button.props.onClick();
@@ -117,6 +125,26 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     assert.equal(opts.replaceTab, true);
     assert.deepEqual(Object.keys(opts.params), ['rioLaunch']);
     assert.match(opts.params.rioLaunch, /^[0-9a-f-]{36}$/i);
+    // The sidebar owns tab identity/navigation; pages see only a session and actions.
+    const body = slots.get('sidebar.right.pane.tab');
+    const services = body.def.inject('s');
+    const page = body.render({
+      ...services,
+      t: (key) => key,
+      useTabInfo: () => ({
+        tab: { contentId: 'rio-1', visible: false, navigation: opts },
+      }),
+    });
+    assert.equal(page.key, 'rio-1');
+    assert.equal(page.props.launchTicket, opts.params.rioLaunch);
+    assert.equal(page.props.visible, false);
+    assert.equal(page.props.session, services.session('rio-1'));
+    for (const action of ['close', 'dispose', 'retain']) {
+      assert.equal(action in page.props.session, false);
+    }
+    assert.equal('tab' in page.props || 'useTabInfo' in page.props, false);
+    assert.equal('session' in slot.def.inject('s'), false);
+    assert.equal(opened.length, 1);
   } finally {
     for (const dispose of disposers.reverse()) dispose();
   }

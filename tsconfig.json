@@ -11,8 +11,8 @@
     "rewriteRelativeImportExtensions": true,
     "noEmitOnError": true,
     "noEmit": true,
-    "jsx": "react-jsx",
+    "jsx": "react",
     "types": ["node", "react"]
   },
-  "include": ["src/**/*.ts", "tsdown.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tsdown.config.ts"]
 }

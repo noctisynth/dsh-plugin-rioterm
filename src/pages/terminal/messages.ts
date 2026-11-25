@@ -1,0 +1,51 @@
+const en = {
+  title: 'Rio terminal',
+  description:
+    'Open a new interactive user shell in this session’s working directory.',
+  loading: 'Loading Rio…',
+  opening: 'Connecting to your terminal…',
+  idle: 'No shell has been started in this tab.',
+  start: 'Start shell',
+  control: 'Take input control',
+  readonly: 'Read-only: another window controls this terminal.',
+  exited: 'The shell exited.',
+  failed: 'The shell failed.',
+  disconnected: 'The terminal was disconnected.',
+  missing:
+    'This tab has no recoverable Rio process. No replacement shell was started.',
+  wasmFailed:
+    'The Rio engine could not start. Fix the error and refresh this page.',
+  resourceFailed: 'Could not load the Rio engine.',
+  details: 'Error details',
+  retry: 'Retry',
+  reconnect: 'Reconnect',
+  new: 'Open a new Rio terminal',
+  input: 'Rio terminal input',
+};
+
+type MessageKey = keyof typeof en;
+export type TerminalTranslate = (key: MessageKey) => string;
+
+const zh = {
+  title: 'Rio 终端',
+  description: '在当前会话的工作目录中新建一个可交互的用户 shell。',
+  loading: '正在加载 Rio…',
+  opening: '正在连接终端…',
+  idle: '此标签尚未启动 shell。',
+  start: '启动 shell',
+  control: '取得输入控制权',
+  readonly: '只读：另一个窗口拥有此终端的输入权。',
+  exited: 'Shell 已退出。',
+  failed: 'Shell 出错。',
+  disconnected: '终端连接已中断。',
+  missing: '此标签没有可恢复的 Rio 进程，未新建替代 shell。',
+  wasmFailed: 'Rio 引擎初始化失败。请解决错误后刷新页面。',
+  resourceFailed: '无法加载 Rio 引擎。',
+  details: '错误详情',
+  retry: '重试',
+  reconnect: '重新连接',
+  new: '打开新的 Rio 终端',
+  input: 'Rio 终端输入',
+} satisfies Record<MessageKey, string>;
+
+export const terminalMessages = { en, zh };

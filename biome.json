@@ -3,5 +3,94 @@
   "files": { "includes": ["**", "!.changes/*.md", "!CHANGELOG.md"] },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
   "linter": { "enabled": true },
-  "javascript": { "formatter": { "quoteStyle": "single" } }
+  "javascript": {
+    "formatter": { "quoteStyle": "single" },
+    "jsxRuntime": "reactClassic"
+  },
+  "overrides": [
+    {
+      "includes": ["src/pages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/plugin/**",
+                      "**/session/**",
+                      "**/client.ts",
+                      "@deepseek-ai/**",
+                      "rioterm"
+                    ],
+                    "message": "Pages receive a TerminalSession and navigation callbacks; use the screen adapter for Rio."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/session/**", "src/terminal/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/pages/**",
+                      "**/plugin/**",
+                      "**/rio/**",
+                      "**/session/**",
+                      "**/client.ts",
+                      "@deepseek-ai/**",
+                      "react",
+                      "react/**",
+                      "rioterm"
+                    ],
+                    "message": "Session and contract code must run without UI, Rio or the DSH runtime."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/rio/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/plugin/**",
+                      "**/pages/**",
+                      "**/session/**",
+                      "**/client.ts",
+                      "@deepseek-ai/**",
+                      "react",
+                      "react/**"
+                    ],
+                    "message": "The Rio screen consumes terminal frames, not sidebar state or PTY handles."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

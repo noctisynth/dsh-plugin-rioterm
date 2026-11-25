@@ -1,95 +1,16 @@
-// Client-facing subset of @deepseek-ai/dsh-api-terminal-controller (0.2.2-rc.5).
-// No import of Harness runtime packages: the composed gateway supplies the Remote.
-export interface Info {
-  id: string;
-  origin: 'agent' | 'user';
-  control: 'agent' | 'user';
-  state: 'running' | 'exited' | 'failed';
-  cols: number;
-  rows: number;
-  exitCode: number | null;
-}
-export interface Limits {
-  maxCols: number;
-  maxRows: number;
-  maxInputBytes: number;
-  maxBufferedBytes: number;
-  scrollback: number;
-}
-type Result<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: { message: string; code?: string } };
-export function value<T>(r: Result<T>): T {
-  if (!r.ok) throw new Error(r.error.message);
-  return r.value;
-}
-interface Window {
-  maxBytes: number;
-  frameOverheadBytes: number;
-}
-export type Frame =
-  | {
-      type: 'snapshot';
-      info: Info;
-      writable: boolean;
-      sequence: number;
-      screen: string;
-      inputWindow?: Window;
-    }
-  | { type: 'output'; sequence: number; data: string }
-  | { type: 'state'; info: Info; writable: boolean }
-  | { type: 'ack'; sequence: number; refusal?: string };
-type Input =
-  | { type: 'write'; data: string; typed?: boolean }
-  | { type: 'resize'; cols: number; rows: number };
-type Command = Input & { sequence: number };
-export interface Attachment extends AsyncIterable<Frame> {
-  send(command: Command): void;
-}
-export interface TerminalRemote {
-  environment(session: string, signal: AbortSignal): Promise<Result<Limits>>;
-  list(session: string): Promise<Result<Info[]>>;
-  create(
-    session: string,
-    request: { id: string; cols: number; rows: number },
-    signal: AbortSignal,
-  ): Promise<Result<Info>>;
-  retain(
-    session: string,
-    id: string,
-    signal: AbortSignal,
-  ): AsyncIterable<{ type: 'retained' }>;
-  attach(session: string, id: string, signal: AbortSignal): Attachment;
-  close(session: string, id: string): Promise<Result<void>>;
-}
-
-export interface FrameSink {
-  snapshot(cols: number, rows: number, data: string): void;
-  write(data: string): void;
-  setWritable(value: boolean): void;
-  /** Apply Host geometry at this position in the output stream. Never sends input. */
-  resize(cols: number, rows: number): void;
-}
-export type Status =
-  | 'opening'
-  | 'connected'
-  | 'readonly'
-  | 'exited'
-  | 'failed'
-  | 'disconnected'
-  | 'missing';
-export function owned(
-  id: string,
-  info: Info | undefined,
-): asserts info is Info {
-  if (
-    !info ||
-    info.id !== id ||
-    info.origin !== 'user' ||
-    info.control !== 'user'
-  )
-    throw new Error('Terminal identity or owner does not match this Rio tab.');
-}
+import type {
+  TerminalFrameSink,
+  TerminalLimits,
+  TerminalStatus,
+} from '../terminal/contracts.ts';
+import {
+  type InputWindow,
+  owned,
+  type RemoteAttachment,
+  type TerminalInfo,
+  type WireCommand,
+  type WireInput,
+} from './remote.ts';
 
 const encoder = new TextEncoder();
 // A wire belongs to exactly one physical attachment. Input is never retried or
@@ -98,29 +19,29 @@ export class TerminalWire {
   private output = -1;
   private next = 0;
   private acknowledged = 0;
-  private queued: { command: Command; cost: number; raw: number }[] = [];
+  private queued: { command: WireCommand; cost: number; raw: number }[] = [];
   private pending = new Map<number, { cost: number; raw: number }>();
   private inFlight = 0;
   private buffered = 0;
   private rawBytes = 0;
   private writable = false;
-  private window?: Window;
+  private window?: InputWindow;
   private hostSize = '';
   // Latest intent for this writable attachment. A state for an earlier resize
   // can arrive while a later request is still queued or in flight.
   private requestedSize: string | undefined;
   private ended = false;
   private readonly id: string;
-  private readonly handle: Attachment;
-  private readonly limits: Limits;
-  private readonly screen: FrameSink;
-  private readonly notify: (s: Status) => void;
+  private readonly handle: RemoteAttachment;
+  private readonly limits: TerminalLimits;
+  private readonly screen: TerminalFrameSink;
+  private readonly notify: (s: TerminalStatus) => void;
   constructor(
     id: string,
-    handle: Attachment,
-    limits: Limits,
-    screen: FrameSink,
-    notify: (s: Status) => void,
+    handle: RemoteAttachment,
+    limits: TerminalLimits,
+    screen: TerminalFrameSink,
+    notify: (s: TerminalStatus) => void,
   ) {
     this.id = id;
     this.handle = handle;
@@ -187,7 +108,7 @@ export class TerminalWire {
       this.stop();
     }
   }
-  private update(info: Info, writable: boolean) {
+  private update(info: TerminalInfo, writable: boolean) {
     const size = `${info.cols}:${info.rows}`;
     if (size !== this.hostSize) {
       // The Host queues resize state alongside output. Reflow *here*, even for
@@ -235,7 +156,7 @@ export class TerminalWire {
     this.requestedSize = target;
     this.queue({ type: 'resize', cols, rows }, 0);
   }
-  private queue(input: Input, raw: number) {
+  private queue(input: WireInput, raw: number) {
     const command = { ...input, sequence: this.next + 1 };
     const cost =
       encoder.encode(JSON.stringify(command)).length +

@@ -1,4 +1,5 @@
 import { initWasm } from 'rioterm';
+import { errorMessage } from '../terminal/error-message.ts';
 
 const wasmPath = 'dsh-plugin-rioterm/wasm/0.1.8.wasm';
 export class ResourceError extends Error {}
@@ -19,9 +20,7 @@ export function loadWasm(reload = false): Promise<void> {
       )
         throw new Error('WASM: expected Content-Type application/wasm');
     } catch (cause) {
-      throw new ResourceError(
-        cause instanceof Error ? cause.message : String(cause),
-      );
+      throw new ResourceError(errorMessage(cause));
     }
     // The upstream WASM initializer also memoizes *rejections*. Retrying a failed
     // fetch is meaningful; retrying a failed instantiation requires a fresh page.

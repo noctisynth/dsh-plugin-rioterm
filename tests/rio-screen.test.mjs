@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { before, test } from 'node:test';
 import { initWasm } from 'rioterm';
-import { RioTerminal, RioTextInput } from '../src/rio-terminal.ts';
+import { RioTextInput } from '../src/rio/keyboard-input.ts';
+import { RioTerminal } from '../src/rio/terminal.ts';
 
 // Real published parser, keyboard and mouse encoders. These are not DOM, IME
 // driver or pixel-level tests: the matching live GUI checks still matter.

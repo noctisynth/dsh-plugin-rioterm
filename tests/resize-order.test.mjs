@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { before, test } from 'node:test';
 import { initWasm } from 'rioterm';
-import { TerminalWire } from '../src/dsh-protocol.ts';
-import { RioTerminal } from '../src/rio-terminal.ts';
+import { RioTerminal } from '../src/rio/terminal.ts';
+import { TerminalWire } from '../src/session/wire.ts';
 
 // Replay deterministic output/state interleavings through the plugin and the
 // shipping Rio parser. No native shell, mock grid, or DOM timing assumptions.
