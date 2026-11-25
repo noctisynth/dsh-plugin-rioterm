@@ -26,6 +26,10 @@ test('the Cordis Config exposes every preference as a serializable, volatile fie
     scrollback: 0,
     fontSize: 48,
     lineHeight: 1.65,
+    paddingTop: 0,
+    paddingRight: 64,
+    paddingBottom: 3,
+    paddingLeft: 1,
     cursor: '#abcd',
     palette: colors({ 0: '#aabbccdd', 15: '#fff' }),
     renderer: 'canvas',
@@ -51,6 +55,10 @@ test('the Cordis Config exposes every preference as a serializable, volatile fie
     { lineHeight: 3.01 },
     { lineHeight: Number.NaN },
     { lineHeight: '1.3' },
+    { paddingTop: -1 },
+    { paddingRight: 65 },
+    { paddingBottom: 1.5 },
+    { paddingLeft: '4' },
     { scrollback: -2 },
     { scrollback: 100001 },
     { scrollback: 0.2 },
@@ -260,6 +268,38 @@ test('save sends only the edited user paths as one fenced mutation; other window
     true,
   );
   assert.equal(writes.length, 1); // Cancel/discard simply reads the latest snapshot; no restorative write.
+});
+
+test('editing one edge to zero and resetting another never copies lower or unrelated overrides', async () => {
+  const base = { paddingTop: 27, paddingRight: 0, paddingLeft: 42 };
+  const user = { paddingTop: 0, paddingBottom: 5, renderer: 'canvas' };
+  const writes = [];
+  const { editor, publish } = mirror(
+    ready(user, base, 4),
+    async (ops, revision) => {
+      writes.push([ops, revision]);
+      return true;
+    },
+  );
+  const next = { paddingBottom: 0, renderer: 'canvas' };
+  assert.equal(await editor.save(next, 3), false);
+  assert.equal(await editor.save(next, 4), true);
+  assert.deepEqual(writes, [
+    [
+      [
+        { op: 'unset', path: ['paddingTop'] },
+        { op: 'set', path: ['paddingBottom'], value: 0 },
+      ],
+      4,
+    ],
+  ]);
+  publish(ready(next, base, 5));
+  const snapshot = editor.getSnapshot();
+  assert.deepEqual(snapshot.user, next);
+  assert.equal(snapshot.value.paddingTop, 27);
+  assert.equal(snapshot.value.paddingRight, 0);
+  assert.equal(snapshot.value.paddingBottom, 0);
+  assert.equal(snapshot.value.paddingLeft, 42);
 });
 
 test('write refusal, transport error, invalid draft and read-only/loading state cannot masquerade as saved', async () => {

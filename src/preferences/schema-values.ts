@@ -24,12 +24,20 @@ export const colorFields = [
   'selectionForeground',
   'selectionBackground',
 ] as const;
+export const paddingFields = [
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+] as const;
+export const paddingRange = [0, 64] as const;
 export const fontSizeRange = [8, 48] as const;
 export const lineHeightRange = [1, 3] as const;
 export const scrollbackRange = [0, 100000] as const;
 export const latencyRange = [0, 2000] as const;
 export interface RioPreferenceValues
-  extends Record<(typeof colorFields)[number], string> {
+  extends Record<(typeof colorFields)[number], string>,
+    Record<(typeof paddingFields)[number], number> {
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
@@ -50,6 +58,10 @@ export const preferenceDefaults: RioPreferenceValues = {
   fontFamily: '',
   fontSize: 0,
   lineHeight: 1.3,
+  paddingTop: 16,
+  paddingRight: 8,
+  paddingBottom: 8,
+  paddingLeft: 8,
   scrollback: -1,
   altIsMeta: true,
   autoFocus: false,

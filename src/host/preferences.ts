@@ -5,6 +5,7 @@ import {
   fontSizeRange,
   latencyRange,
   lineHeightRange,
+  paddingRange,
   type RioPreferenceValues,
   scrollbackRange,
 } from '../preferences/schema-values.ts';
@@ -46,6 +47,12 @@ export const Config = z.object({
     .step(Number.EPSILON)
     .default(defaults.lineHeight)
     .volatile(),
+  paddingTop: integer(paddingRange).default(defaults.paddingTop).volatile(),
+  paddingRight: integer(paddingRange).default(defaults.paddingRight).volatile(),
+  paddingBottom: integer(paddingRange)
+    .default(defaults.paddingBottom)
+    .volatile(),
+  paddingLeft: integer(paddingRange).default(defaults.paddingLeft).volatile(),
   scrollback: z
     .union([defaults.scrollback, integer(scrollbackRange)])
     .default(defaults.scrollback)

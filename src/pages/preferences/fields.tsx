@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Button } from '../../components/ui/button.tsx';
 import { cn } from '../../lib/cn.ts';
 import {
+  type paddingFields,
   preferenceDefaults,
   type RioPreferenceValues,
 } from '../../preferences/values.ts';
@@ -70,6 +71,7 @@ type TextName =
   | 'fontFamily'
   | 'fontSize'
   | 'lineHeight'
+  | (typeof paddingFields)[number]
   | 'scrollback'
   | 'latencyThreshold';
 export function TextField({
@@ -78,18 +80,21 @@ export function TextField({
   fallback,
   hint,
   range,
+  sharedRangeHintId,
 }: {
   form: FieldForm;
   name: TextName;
   fallback: string;
   hint?: string;
   range?: readonly [number, number];
+  sharedRangeHintId?: string;
 }) {
   const id = React.useId();
   const { fields, base, t } = form;
   const invalid = form.invalid.includes(name);
   const decimal = name === 'lineHeight';
   const rangeHint =
+    !sharedRangeHintId &&
     range &&
     `${t(decimal ? 'decimalRange' : 'integerRange')}: ${range.join('–')}.`;
   const description = [
@@ -112,7 +117,11 @@ export function TextField({
         autoComplete="off"
         spellCheck={false}
         aria-invalid={invalid || undefined}
-        aria-describedby={description ? `${id}-hint` : undefined}
+        aria-describedby={
+          [sharedRangeHintId, description && `${id}-hint`]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         className={cn(controlClass, range && 'rio:max-w-40')}
         onChange={(event) => form.change(name, event.currentTarget.value)}
       />

@@ -3,6 +3,7 @@ import {
   fontSizeRange,
   latencyRange,
   lineHeightRange,
+  paddingRange,
   preferenceDefaults,
   type RioOverrides,
   type RioPreferenceValues,
@@ -75,6 +76,15 @@ function assign(
       if (stored && v === 0) return;
       if (numeric(v, fontSizeRange)) {
         target.fontSize = v;
+        return;
+      }
+      break;
+    case 'paddingTop':
+    case 'paddingRight':
+    case 'paddingBottom':
+    case 'paddingLeft':
+      if (numeric(v, paddingRange)) {
+        target[key] = v;
         return;
       }
       break;

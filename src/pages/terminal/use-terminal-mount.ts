@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { Observable } from '../../preferences/editor.ts';
 import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import { createRioScreen } from '../../rio/screen.ts';
@@ -34,13 +40,15 @@ export function useTerminalMount({
   const labelRef = useRef({ inputLabel, linkPrompt });
   const appearanceRef = useRef(appearance);
   appearanceRef.current = appearance;
-  // Subscribe separately from mount: a preference change isn't a new attachment.
-  useEffect(() => {
-    const sync = () => active.current?.setPreferences(appearance.getSnapshot());
-    const off = appearance.subscribe(sync);
-    sync();
-    return off;
-  }, [appearance]);
+  const preferences = useSyncExternalStore(
+    appearance.subscribe,
+    appearance.getSnapshot,
+  );
+  // Apply renderer changes after the viewport's new insets reach the DOM.
+  // Neither geometry nor theme updates belong in the attachment dependencies.
+  useLayoutEffect(() => {
+    active.current?.setPreferences(preferences);
+  }, [preferences]);
   visibleRef.current = visible;
   labelRef.current = { inputLabel, linkPrompt };
 
@@ -81,6 +89,7 @@ export function useTerminalMount({
 
   return {
     containerRef,
+    preferences,
     state,
     retry: (focusInput: boolean) => active.current?.retry(focusInput),
   };

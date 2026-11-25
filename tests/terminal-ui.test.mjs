@@ -6,6 +6,7 @@ import React from 'react';
 import TestRenderer from 'react-test-renderer';
 import { compileUiStyles } from '../build/ui-styles.ts';
 import { cn } from '../src/lib/cn.ts';
+import { defaultEffectivePreferences } from '../src/preferences/values.ts';
 
 // Exercise real React components and Tailwind output; no browser, live PTY or pixels involved.
 const jiti = createJiti(import.meta.url, { jsx: true, fsCache: false });
@@ -113,18 +114,30 @@ test('guide is one named native button, sizes override the primitive, and openin
   }
 });
 
-test('page keeps an independent full-size viewport even when status is visible', () => {
-  const tree = TestRenderer.create(
-    React.createElement(TerminalPage, {
-      t: key,
-      visible: false,
-      launchTicket: undefined,
-      session: {},
-      appearance: { subscribe: () => () => {}, getSnapshot: assert.fail },
-      issueLaunch: assert.fail,
-      openNew: assert.fail,
-    }),
-  );
+test('the viewport keeps its own content box and applies four live insets without remounting', () => {
+  let preferences = defaultEffectivePreferences;
+  const listeners = new Set();
+  const appearance = {
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    getSnapshot: () => preferences,
+  };
+  let tree;
+  TestRenderer.act(() => {
+    tree = TestRenderer.create(
+      React.createElement(TerminalPage, {
+        t: key,
+        visible: false,
+        launchTicket: undefined,
+        session: {},
+        appearance,
+        issueLaunch: assert.fail,
+        openNew: assert.fail,
+      }),
+    );
+  });
   try {
     const root = tree.root.findByType('section');
     assert.equal(root.props['data-rio-ui'], 'terminal');
@@ -143,9 +156,41 @@ test('page keeps an independent full-size viewport even when status is visible',
     assert.match(viewport.props.className, /rio:inset-0/);
     assertCompiled(root.props.className, ':where(:scope)');
     assertCompiled(viewport.props.className);
+    assert.match(viewport.props.className, /rio:box-border/);
+    assert.match(viewport.props.className, /rio:border-solid/);
+    assert.deepEqual(viewport.props.style, {
+      borderTopWidth: 16,
+      borderRightWidth: 8,
+      borderBottomWidth: 8,
+      borderLeftWidth: 8,
+      borderColor: 'transparent',
+    });
+    TestRenderer.act(() => {
+      preferences = {
+        ...preferences,
+        paddingTop: 0,
+        paddingRight: 3,
+        paddingBottom: 17,
+        paddingLeft: 64,
+        theme: { background: '#102030' },
+      };
+      for (const notify of listeners) notify();
+    });
+    assert.equal(
+      tree.root.find((n) => n.type === 'div' && n.props['data-rio-viewport']),
+      viewport,
+    );
+    assert.deepEqual(viewport.props.style, {
+      borderTopWidth: 0,
+      borderRightWidth: 3,
+      borderBottomWidth: 17,
+      borderLeftWidth: 64,
+      borderColor: '#102030',
+    });
   } finally {
-    tree.unmount();
+    TestRenderer.act(() => tree.unmount());
   }
+  assert.equal(listeners.size, 0);
 });
 
 test('takeover transfers focus only from the active button in a foreground document', () => {

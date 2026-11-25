@@ -63,10 +63,10 @@ class Editor {
   }
 }
 
-function mount(test, editor, options) {
+function mount(test, editor, options, t = translate) {
   let tree;
   const element = (hostFonts = fonts) =>
-    React.createElement(PreferencesPage, { editor, hostFonts, t: translate });
+    React.createElement(PreferencesPage, { editor, hostFonts, t });
   act(() => {
     tree = TestRenderer.create(element(), options);
   });
@@ -112,7 +112,7 @@ function mount(test, editor, options) {
     updateFonts: (hostFonts) => act(() => tree.update(element(hostFonts))),
     save: () =>
       act(async () => {
-        const el = button(en.save);
+        const el = button(t('save'));
         assert.ok(!el.props.disabled);
         el.props.onClick();
       }),
@@ -195,6 +195,97 @@ test('single-field unsets, zero history, cancel and restore are staged until Sav
   assert.equal(editor.writes.length, 1);
   await view.save();
   assert.deepEqual(editor.writes[1], { revision: 8, next: {} });
+});
+
+test('padding is visible outside disclosures in both locales, with labeled units, range and rendered defaults', (tc) => {
+  for (const copy of Object.values(preferenceMessages)) {
+    const view = mount(tc, new Editor(), undefined, (key) => copy[key]);
+    const section = view.tree.root.findByProps({ 'aria-label': copy.padding });
+    for (let node = section; node; node = node.parent)
+      assert.notEqual(node.type, 'details');
+    for (const [name, fallback] of Object.entries({
+      paddingTop: '16',
+      paddingRight: '8',
+      paddingBottom: '8',
+      paddingLeft: '8',
+    })) {
+      const { props } = section.findByProps({ name, type: 'text' });
+      assert.equal(props.value, '');
+      assert.equal(props.placeholder, fallback);
+      assert.equal(props.inputMode, 'numeric');
+      const label = section.findByProps({ htmlFor: props.id });
+      assert.equal(label.children.join(''), copy[name]);
+      assert.match(copy[name], /px/);
+      const hint = section.findByProps({ id: props['aria-describedby'] });
+      assert.ok(hint.children.join('').includes(copy.paddingHelp));
+      assert.match(hint.children.join(''), /0–64/);
+    }
+  }
+});
+
+test('padding saves only edited sides, including zero; clear and restore use the inherited spacing', async (tc) => {
+  const editor = new Editor({ base: { paddingBottom: 0, paddingLeft: 23 } });
+  const view = mount(tc, editor);
+  assert.equal(view.field('paddingBottom').props.placeholder, '0');
+  assert.equal(view.field('paddingLeft').props.placeholder, '23');
+  view.input('paddingTop', '0');
+  view.input('paddingRight', '64');
+  view.input('paddingLeft', '31');
+  assert.deepEqual(editor.writes, []);
+  await view.save();
+  assert.deepEqual(editor.writes[0].next, {
+    paddingTop: 0,
+    paddingRight: 64,
+    paddingLeft: 31,
+  });
+  assert.equal(view.field('paddingTop').props.value, '0');
+  view.input('paddingRight', '');
+  view.input('paddingBottom', '12');
+  await view.save();
+  assert.deepEqual(editor.writes[1].next, {
+    paddingTop: 0,
+    paddingBottom: 12,
+    paddingLeft: 31,
+  });
+  view.click(en.restore);
+  assert.equal(view.field('paddingTop').props.value, '');
+  assert.equal(view.field('paddingTop').props.placeholder, '16');
+  assert.equal(view.field('paddingLeft').props.placeholder, '23');
+  view.click(en.cancel);
+  assert.equal(view.field('paddingTop').props.value, '0');
+  assert.equal(view.field('paddingLeft').props.value, '31');
+  view.click(en.restore);
+  assert.equal(editor.writes.length, 2);
+  await view.save();
+  assert.deepEqual(editor.writes[2].next, {});
+});
+
+test('invalid padding stays editable, names the side in the error summary, and blocks saving', (tc) => {
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  for (const [name, value] of Object.entries({
+    paddingTop: '-1',
+    paddingRight: '65',
+    paddingBottom: '1.5',
+    paddingLeft: '8px',
+  })) {
+    view.input(name, value);
+    assert.equal(view.field(name).props.value, value);
+    assert.equal(view.field(name).props['aria-invalid'], true);
+    assert.ok(
+      view.tree.root
+        .findAllByType('p')
+        .some((node) =>
+          node.children.join('').includes(`${en.invalid}: ${en[name]}`),
+        ),
+    );
+    const save = view.button(en.save);
+    assert.equal(save.props.disabled, true);
+    act(() => save.props.onClick());
+    assert.deepEqual(editor.writes, []);
+    view.input(name, '');
+    assert.equal(view.field(name).props['aria-invalid'], undefined);
+  }
 });
 
 test('Canvas-only controls follow the draft renderer and echo; hiding them does not destroy saved choices', async (tc) => {

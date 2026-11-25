@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAppearance } from '../src/plugin/appearance.ts';
 import {
+  paddingFields,
   readOverrides,
+  resolvePreferences,
   terminalFontStack,
   validatedOverrides,
 } from '../src/preferences/values.ts';
@@ -59,6 +61,35 @@ test('inherited fonts track the terminal role independently, including after cle
   assert.equal(seen.length, 5);
   stop();
   assert.equal(listeners.size + themeListeners.size, 0);
+});
+
+test('padding defaults and overrides resolve per edge; zero is a value and omission resets it', () => {
+  const edges = (overrides) => {
+    const resolved = resolvePreferences(
+      overrides,
+      { fontFamily: '', fontSize: 13 },
+      0,
+    );
+    return paddingFields.map((field) => resolved[field]);
+  };
+  assert.deepEqual(edges({}), [16, 8, 8, 8]);
+  for (const [index, field] of paddingFields.entries()) {
+    for (const value of [0, 64]) {
+      const overrides = { [field]: value };
+      assert.deepEqual(validatedOverrides(overrides), overrides);
+      assert.deepEqual(readOverrides(overrides), overrides);
+      assert.deepEqual(edges(overrides), [16, 8, 8, 8].with(index, value));
+    }
+    for (const value of [-1, 65, 2.5, NaN, Infinity, '8', null]) {
+      assert.throws(
+        () => validatedOverrides({ [field]: value }),
+        new RegExp(field),
+      );
+      assert.deepEqual(readOverrides({ [field]: value, fontSize: 15 }), {
+        fontSize: 15,
+      });
+    }
+  }
 });
 
 test('reject malformed drafts; isolate invalid persisted fields rather than losing all overrides', () => {

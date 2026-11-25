@@ -26,7 +26,7 @@ export function TerminalPage({
   t,
 }: TerminalPageProps): React.ReactElement {
   const [requested, setRequested] = React.useState<string>();
-  const { containerRef, state, retry } = useTerminalMount({
+  const { containerRef, preferences, state, retry } = useTerminalMount({
     appearance,
     session,
     visible,
@@ -42,7 +42,8 @@ export function TerminalPage({
       data-rio-terminal
       className="rio:relative rio:isolate rio:h-full rio:w-full rio:min-h-0 rio:min-w-0 rio:overflow-hidden rio:bg-background rio:text-foreground"
     >
-      {/* ResizeObserver measures only this stable box, never the notice. */}
+      {/* A colored border leaves the screen's 100% child exactly the usable content box.
+          ResizeObserver sees this content box; neither the gutter nor the notice adds cells. */}
       <div
         ref={containerRef}
         aria-busy={
@@ -51,7 +52,14 @@ export function TerminalPage({
           state.status === 'reconnecting'
         }
         data-rio-viewport
-        className="rio:absolute rio:inset-0 rio:z-0 rio:overflow-hidden"
+        className="rio:absolute rio:inset-0 rio:z-0 rio:box-border rio:overflow-hidden rio:border-solid"
+        style={{
+          borderTopWidth: preferences.paddingTop,
+          borderRightWidth: preferences.paddingRight,
+          borderBottomWidth: preferences.paddingBottom,
+          borderLeftWidth: preferences.paddingLeft,
+          borderColor: preferences.theme.background || 'transparent',
+        }}
       />
       {/* A persistent, non-focusable live region announces readiness without covering the grid. */}
       <span role="status" className="rio:sr-only">

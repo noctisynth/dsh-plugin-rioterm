@@ -11,6 +11,7 @@ import { AdvancedFields } from './advanced-fields.tsx';
 import { hintClass } from './fields.tsx';
 import { FontFields } from './font-fields.tsx';
 import type { PreferenceTranslate } from './messages.ts';
+import { PaddingFields } from './padding-fields.tsx';
 import { usePreferenceDraft } from './use-preference-draft.ts';
 
 interface PreferencesPageProps {
@@ -171,6 +172,7 @@ export function PreferencesPage({
         className="rio:m-0 rio:grid rio:min-w-0 rio:gap-4 rio:border-0 rio:p-0"
       >
         <FontFields form={form} hostFonts={hostFonts} preview={state.preview} />
+        <PaddingFields form={form} />
         <AdvancedFields form={form} />
       </fieldset>
       <FormActions
