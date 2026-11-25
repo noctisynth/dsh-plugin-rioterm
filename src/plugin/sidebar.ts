@@ -1,3 +1,4 @@
+import { RioIcon } from '../components/rio-icon.tsx';
 import { terminalMessages } from '../pages/terminal/messages.ts';
 import type { Observable } from '../preferences/editor.ts';
 import type { EffectiveRioPreferences } from '../preferences/values.ts';
@@ -5,12 +6,13 @@ import type { RioSessions } from '../session/registry.ts';
 import { errorMessage } from '../terminal/error-message.ts';
 import { RIO_TAB_KIND } from '../terminal/identity.ts';
 import type { ClientContext } from './context.ts';
-import { GuideSlot, PageSlot } from './sidebar-views.ts';
+import { GuideSlot, PageSlot, TitleSlot } from './sidebar-views.ts';
 
 const id = 'dsh-plugin-rioterm';
 const namespace = 'rioInteractiveTerminal';
 const guideSlot = 'sidebar.right.tab.guide.entry';
 const pageSlot = 'sidebar.right.pane.tab';
+const titleSlot = 'sidebar.right.pane.tab.title';
 
 export function registerTerminalSidebar(
   ctx: ClientContext,
@@ -36,6 +38,7 @@ export function registerTerminalSidebar(
             order: 50,
             title: () => t('title'),
             description: () => t('description'),
+            icon: RioIcon,
           },
         ],
       }),
@@ -76,6 +79,16 @@ export function registerTerminalSidebar(
         ),
       ),
     `${id}: new terminal`,
+  );
+  ctx.effect(
+    () =>
+      ctx.slots.inject(titleSlot, () =>
+        ctx.slots.register(
+          { name: titleSlot, key: id, locale: namespace },
+          TitleSlot,
+        ),
+      ),
+    `${id}: tab title`,
   );
   ctx.effect(
     () =>

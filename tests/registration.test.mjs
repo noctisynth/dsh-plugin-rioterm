@@ -307,6 +307,25 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     const slot = slots.get('sidebar.right.tab.guide.entry');
     assert.equal(slot.def.key, manifest.name);
     const opened = [];
+    const titleSlot = slots.get('sidebar.right.pane.tab.title');
+    assert.equal(titleSlot.def.key, tabTypes[0].id);
+    const titleView = TestRenderer.create(
+      React.createElement(titleSlot.render, {
+        useTabInfo: () => ({ tab: { title: 'Rio 终端' } }),
+      }),
+    );
+    try {
+      const icon = titleView.root.findByType(tabTypes[0].guide[0].icon);
+      assert.equal(icon.props.size, 16);
+      assert.deepEqual(
+        titleView.root.findByProps({ 'data-rio-ui': 'tab-title' }).children,
+        ['Rio 终端'],
+      );
+      assert.deepEqual(titleView.root.findAllByType('button'), []);
+      assert.deepEqual(operations, []);
+    } finally {
+      titleView.unmount();
+    }
     const guide = slot.render({
       ...slot.def.inject('s'),
       title: 'Rio',
@@ -318,6 +337,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     const guideView = TestRenderer.create(guide);
     try {
       const button = guideView.root.findByType('button');
+      assert.equal(button.findByType(tabTypes[0].guide[0].icon).props.size, 22);
       assert.equal(opened.length, 0);
       button.props.onClick();
     } finally {

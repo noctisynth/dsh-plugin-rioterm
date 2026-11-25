@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import type { TerminalTranslate } from '../pages/terminal/messages.ts';
 import { TerminalGuide } from '../pages/terminal/terminal-guide.tsx';
 import { TerminalPage } from '../pages/terminal/terminal-page.tsx';
+import { TerminalTabTitle } from '../pages/terminal/terminal-tab-title.tsx';
 import type { Observable } from '../preferences/editor.ts';
 import type { EffectiveRioPreferences } from '../preferences/values.ts';
 import type { TerminalSession } from '../terminal/contracts.ts';
@@ -42,6 +43,10 @@ export function GuideSlot({
     description,
     onOpen: () => openNew(tab, issueLaunch),
   });
+}
+
+export function TitleSlot({ useTabInfo }: Pick<TabSlotProps, 'useTabInfo'>) {
+  return createElement(TerminalTabTitle, { title: useTabInfo().tab.title });
 }
 
 export function PageSlot({

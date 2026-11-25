@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ComponentType, ReactElement } from 'react';
 import type { TerminalTranslate } from '../pages/terminal/messages.ts';
 import type { RemoteStreamFactory, TerminalRemote } from '../session/remote.ts';
 import type { PreferenceConfigForms } from './preferences.ts';
@@ -7,6 +7,7 @@ import type { PreferenceConfigForms } from './preferences.ts';
 // bundle a second DSH client or pass the application context to a page.
 type Dispose = () => void;
 export interface SidebarTab {
+  title: string;
   contentId: string;
   visible: boolean;
   navigation: { params?: { rioLaunch?: string } };
@@ -43,7 +44,7 @@ export interface ClientContext {
         name: string;
         key: string;
         locale: string;
-        inject(sessionId: string): Injected;
+        inject?(sessionId: string): Injected;
       },
       component: (props: Props) => ReactElement,
     ): Dispose;
@@ -60,6 +61,7 @@ export interface ClientContext {
         order: number;
         title: () => string;
         description: () => string;
+        icon: ComponentType<{ size?: number }>;
       }[];
     }): Dispose;
   };

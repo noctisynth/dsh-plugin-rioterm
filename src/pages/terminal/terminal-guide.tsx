@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { RioIcon } from '../../components/rio-icon.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { RIO_TAB_KIND } from '../../terminal/identity.ts';
 
@@ -23,17 +24,27 @@ export function TerminalGuide({
       aria-describedby={description ? descriptionId : undefined}
       title={description}
       onClick={onOpen}
-      className="rio:min-h-14 rio:w-full rio:flex-col rio:items-start rio:gap-0.5 rio:rounded-lg rio:bg-muted rio:px-5 rio:py-3.5 rio:text-start rio:focus-visible:-outline-offset-2"
+      className="rio:flex rio:min-h-[56px] rio:w-full rio:justify-start rio:gap-[14px] rio:rounded-guide rio:border-[0.5px] rio:border-guide-border rio:bg-muted rio:px-[20px] rio:py-[14px] rio:text-start rio:font-[number:inherit] rio:focus-visible:-outline-offset-2"
     >
-      <span className="rio:max-w-full">{title}</span>
-      {description && (
-        <span
-          id={descriptionId}
-          className="rio:max-w-full rio:text-xs rio:font-normal rio:text-muted-foreground"
-        >
-          {description}
+      <span
+        aria-hidden="true"
+        className="rio:flex rio:size-[26px] rio:flex-none rio:items-center rio:justify-center rio:text-muted-foreground"
+      >
+        <RioIcon size={description ? 26 : 22} />
+      </span>
+      <span className="rio:flex rio:min-w-0 rio:flex-1 rio:flex-col rio:gap-[3px]">
+        <span className="rio:truncate rio:text-[14px] rio:leading-[1.4]">
+          {title}
         </span>
-      )}
+        {description && (
+          <span
+            id={descriptionId}
+            className="rio:truncate rio:text-[11px] rio:leading-[1.4] rio:text-guide-description"
+          >
+            {description}
+          </span>
+        )}
+      </span>
     </Button>
   );
 }

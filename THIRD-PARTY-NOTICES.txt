@@ -26,5 +26,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+Rio terminal icon — original (classic) flat design by Raphael Amorim.
+The package and sidebar icons reproduce the paths and colors of Rio's classic
+SVG, scaled and centered for their respective display sizes. The source is
+part of the Rio project distributed with the MIT notice reproduced above:
+https://github.com/raphamorim/rio/blob/b13db0193c61c105b86e12b4ac6c6fc255cf0a36/misc/logo-2024.svg
+https://github.com/raphamorim/rio/blob/b13db0193c61c105b86e12b4ac6c6fc255cf0a36/LICENSE
+Rio identifies the terminal engine used by this independent DSH plugin;
+no affiliation or endorsement is implied. This is not the 2025 3D redesign:
+https://rioterm.com/blog/2025/01/17/new-year-new-look
+
 class-variance-authority — Copyright 2022 Joe Bell.
 Licensed under Apache-2.0. Full license: docs/licenses/class-variance-authority.txt.

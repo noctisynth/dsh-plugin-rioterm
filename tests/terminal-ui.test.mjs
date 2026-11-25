@@ -78,17 +78,17 @@ test('component class overrides merge by variant without changing unprefixed hos
   );
 });
 
-test('guide is one named native button, sizes override the primitive, and opening is explicit', () => {
+test('guide keeps one native launch button and the same text inset in both densities', () => {
   let opens = 0;
-  const tree = TestRenderer.create(
+  const render = (description) =>
     React.createElement(TerminalGuide, {
       title: 'Rio',
-      description: 'Start a shell',
+      description,
       onOpen: () => {
         opens++;
       },
-    }),
-  );
+    });
+  const tree = TestRenderer.create(render('Start a shell'));
   try {
     const button = tree.root.findByType('button');
     assert.equal(button.props['data-rio-ui'], 'guide');
@@ -98,14 +98,57 @@ test('guide is one named native button, sizes override the primitive, and openin
     );
     assert.equal(button.props.type, 'button');
     assert.equal(button.props['aria-label'], 'Rio');
+    assert.equal(button.props.autoFocus, undefined);
+    assertCompiled(button.props.className, ':where(:scope)');
+    const classes = button.props.className.split(' ');
+    for (const token of [
+      'rio:min-h-[56px]',
+      'rio:gap-[14px]',
+      'rio:border-[0.5px]',
+      'rio:border-guide-border',
+      'rio:rounded-guide',
+      'rio:hover:bg-accent',
+      'rio:focus-visible:outline-ring',
+      'rio:focus-visible:-outline-offset-2',
+    ]) {
+      assert.ok(classes.includes(token), token);
+    }
+    // Just emitting rounded-guide isn't enough: rounded-md is later in the CSS.
+    assert.deepEqual(
+      classes.filter((token) => token.startsWith('rio:rounded-')),
+      ['rio:rounded-guide'],
+    );
+    assert.match(
+      css,
+      /\.rio\\:rounded-guide[^{}]*\{border-radius:var\(--dsl-guide-entry-radius,/,
+    );
+    const checkLayout = (glyphSize) => {
+      const [icon, text] = button.children;
+      assert.equal(icon.props['aria-hidden'], 'true');
+      assert.ok(icon.props.className.includes('rio:size-[26px]'));
+      const svg = icon.findByType('svg');
+      assert.equal(svg.props.width, glyphSize);
+      assert.equal(svg.props.height, glyphSize);
+      assertCompiled(svg.props.className, ':where(:scope)');
+      assert.ok(text.props.className.includes('rio:min-w-0'));
+      const [title] = text.children;
+      assert.deepEqual(title.children, ['Rio']);
+      assert.ok(title.props.className.includes('rio:truncate'));
+      for (const span of button.findAllByType('span')) {
+        assertCompiled(span.props.className);
+      }
+    };
     const description = button.props['aria-describedby'];
     assert.ok(description);
-    assert.deepEqual(button.findByProps({ id: description }).children, [
-      'Start a shell',
-    ]);
-    assert.equal(button.props.autoFocus, undefined);
-    assert.ok(!button.props.className.split(' ').includes('rio:min-h-9'));
-    assertCompiled(button.props.className, ':where(:scope)');
+    const hint = button.findByProps({ id: description });
+    assert.deepEqual(hint.children, ['Start a shell']);
+    assert.ok(hint.props.className.includes('rio:truncate'));
+    checkLayout(26);
+    tree.update(render(undefined)); // The host hides descriptions in longer lists.
+    assert.equal(tree.root.findByType('button'), button);
+    assert.equal(button.props['aria-describedby'], undefined);
+    assert.equal(button.findAllByProps({ id: description }).length, 0);
+    checkLayout(22);
     assert.equal(opens, 0);
     button.props.onClick();
     assert.equal(opens, 1);

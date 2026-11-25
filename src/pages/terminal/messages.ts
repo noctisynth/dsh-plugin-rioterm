@@ -1,7 +1,6 @@
 const en = {
   title: 'Rio terminal',
-  description:
-    'Open a new interactive user shell in this session’s working directory.',
+  description: 'Open a terminal in the session’s working directory',
   loading: 'Loading Rio…',
   opening: 'Connecting to your terminal…',
   reconnecting: 'Reconnecting to the same terminal. Input is unavailable.',
@@ -34,7 +33,7 @@ export type TerminalTranslate = (key: MessageKey) => string;
 
 const zh = {
   title: 'Rio 终端',
-  description: '在当前会话的工作目录中新建一个可交互的用户 shell。',
+  description: '在会话工作目录打开终端',
   loading: '正在加载 Rio…',
   opening: '正在连接终端…',
   reconnecting: '正在重新连接到原终端，暂时无法输入。',
