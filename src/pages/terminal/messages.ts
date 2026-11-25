@@ -26,6 +26,13 @@ const en = {
   new: 'Open a new Rio terminal',
   input: 'Rio terminal input',
   openLink: 'Open the following address outside the terminal?',
+  findOutput: 'Find in terminal output',
+  findPrevious: 'Previous match (Shift+Enter)',
+  findNext: 'Next match (Enter)',
+  findClose: 'Close find (Esc)',
+  findNone: 'No matches',
+  findPending: 'Searching…',
+  findWaiting: 'Waiting for terminal output…',
 };
 
 type MessageKey = keyof typeof en;
@@ -57,6 +64,13 @@ const zh = {
   new: '打开新的 Rio 终端',
   input: 'Rio 终端输入',
   openLink: '要在终端外打开以下地址吗？',
+  findOutput: '查找终端输出',
+  findPrevious: '上一个匹配项（Shift+Enter）',
+  findNext: '下一个匹配项（Enter）',
+  findClose: '关闭查找（Esc）',
+  findNone: '无匹配项',
+  findPending: '正在查找…',
+  findWaiting: '正在等待终端输出…',
 } satisfies Record<MessageKey, string>;
 
 export const terminalMessages = { en, zh };

@@ -1,10 +1,20 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { Observable } from '../../preferences/editor.ts';
 import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import { beginAutoFocus } from '../../rio/keyboard-input.ts';
 import { createRioScreen } from '../../rio/screen.ts';
 import { loadWasm } from '../../rio/wasm-loader.ts';
 import type { TerminalSession } from '../../terminal/contracts.ts';
+import {
+  EMPTY_SEARCH_RESULT,
+  type TerminalSearchDirection,
+} from '../../terminal/search.ts';
 import {
   mountTerminalView,
   type TerminalViewMount,
@@ -33,6 +43,17 @@ export function useTerminalMount({
   const containerRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<TerminalViewState>({ status: 'loading' });
   const mountRef = useRef<TerminalViewMount>();
+  const [searchRevision, setSearchRevision] = useState(0);
+  const search = useCallback(
+    (query: string, direction: TerminalSearchDirection) =>
+      mountRef.current?.search(query, direction) ?? EMPTY_SEARCH_RESULT,
+    [],
+  );
+  const clearSearch = useCallback(() => mountRef.current?.clearSearch(), []);
+  const focusTerminal = useCallback(
+    () => mountRef.current?.focusTerminal(),
+    [],
+  );
   const tabRef = useRef({ visible, active });
   const labelRef = useRef({ inputLabel, linkPrompt });
   const appearanceRef = useRef(appearance);
@@ -59,6 +80,15 @@ export function useTerminalMount({
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!started || !container) return;
+    // Output can arrive many times per frame. Only an active, invalidated search
+    // requests a refresh, and streaming output must not keep postponing it.
+    let refresh: ReturnType<typeof setTimeout> | undefined;
+    const invalidateSearch = () => {
+      refresh ??= setTimeout(() => {
+        refresh = undefined;
+        setSearchRevision((revision) => revision + 1);
+      }, 250);
+    };
     const mount = mountTerminalView({
       session,
       ticket,
@@ -78,18 +108,24 @@ export function useTerminalMount({
           onResize: input.resize,
           label: labelRef.current.inputLabel,
           linkPrompt: labelRef.current.linkPrompt,
+          onSearchInvalidated: invalidateSearch,
         }),
       onState: setState,
     });
     mountRef.current = mount;
     return () => {
       mount.dispose();
+      clearTimeout(refresh);
       if (mountRef.current === mount) mountRef.current = undefined;
     };
   }, [started, session, ticket]);
 
   return {
     containerRef,
+    search,
+    clearSearch,
+    focusTerminal,
+    searchRevision,
     preferences,
     state,
     retry: (focusInput: boolean) => mountRef.current?.retry(focusInput),

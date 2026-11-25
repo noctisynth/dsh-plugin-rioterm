@@ -15,6 +15,8 @@ const buttonVariants = cva(
           'rio:border-transparent rio:bg-primary rio:text-primary-foreground rio:hover:bg-primary-hover',
         outline:
           'rio:border-border rio:bg-background rio:text-foreground rio:hover:bg-accent rio:hover:text-accent-foreground',
+        ghost:
+          'rio:border-0 rio:bg-transparent rio:text-muted-foreground rio:hover:bg-accent rio:hover:text-accent-foreground',
       },
       size: {
         default: 'rio:min-h-9 rio:px-3 rio:py-1.5 rio:text-sm',

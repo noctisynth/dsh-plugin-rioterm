@@ -55,6 +55,11 @@ function fixture({ knownIdentity = true, autoFocus = true } = {}) {
       bindings = input;
       events.push(['screen', limits]);
       return {
+        search(query, direction) {
+          events.push(['search', query, direction]);
+          return { index: 1, count: 3, truncated: false };
+        },
+        clearSearch: () => events.push('clear search'),
         focus: () => events.push('focus'),
         focusIfInteractive: () => events.push('autofocus'),
         setVisible: (value) => events.push(['screen visible', value]),
@@ -88,6 +93,31 @@ test('an idle page does not download WASM, discover a shell or consume a launch 
   view.retry();
   view.dispose();
   assert.deepEqual(f.events, [['state', { status: 'idle' }]]);
+});
+
+test('find navigates only the current local screen, even read-only, and never acquires input', async () => {
+  const f = fixture({ autoFocus: false });
+  const view = mountTerminalView(f.options);
+  const empty = { index: 0, count: 0, truncated: false };
+  assert.deepEqual(view.search('error', 'first'), empty);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  f.panel.status('readonly');
+  f.events.length = 0;
+  assert.deepEqual(view.search('error', 'next'), {
+    index: 1,
+    count: 3,
+    truncated: false,
+  });
+  view.focusTerminal();
+  f.tab.active = false; // A visible split is still allowed to display its output, not navigate another search.
+  assert.deepEqual(view.search('error', 'previous'), empty);
+  view.clearSearch();
+  assert.deepEqual(f.events, [['search', 'error', 'next'], 'clear search']);
+  view.dispose();
+  f.tab.active = true;
+  assert.deepEqual(view.search('error', 'refresh'), empty);
 });
 
 test('disposing during either async preflight cannot attach a stale page or report late failure', async () => {

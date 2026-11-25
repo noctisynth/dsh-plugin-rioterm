@@ -3,13 +3,14 @@ import {
   type EffectiveRioPreferences,
 } from '../preferences/values.ts';
 import type { TerminalFrameSink } from '../terminal/contracts.ts';
+import type { TerminalSearch } from '../terminal/search.ts';
 import { bindKeyboardInput } from './keyboard-input.ts';
 import { bindPointerInput } from './pointer-input.ts';
 import { makeRioRenderer } from './renderer.ts';
 import { RioTerminal, type RioTerminalOptions } from './terminal.ts';
 import { RioViewport } from './viewport.ts';
 
-export interface RioScreen extends TerminalFrameSink {
+export interface RioScreen extends TerminalFrameSink, TerminalSearch {
   focus(): void;
   focusIfInteractive(): void;
   setVisible(visible: boolean): void;
@@ -112,6 +113,8 @@ export function createRioScreen(
   return {
     focus: keyboard.focus,
     focusIfInteractive: keyboard.focusIfInteractive,
+    search: (query, direction) => core.search(query, direction),
+    clearSearch: () => core.clearSearch(),
     snapshot(cols, rows, data) {
       if (signal.aborted) return;
       keyboard.reset();

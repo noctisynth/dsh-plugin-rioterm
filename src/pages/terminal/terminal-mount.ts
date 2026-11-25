@@ -8,6 +8,7 @@ import type {
   TerminalStatus,
 } from '../../terminal/contracts.ts';
 import { errorMessage } from '../../terminal/error-message.ts';
+import { EMPTY_SEARCH_RESULT } from '../../terminal/search.ts';
 
 export interface TerminalViewState {
   status: TerminalStatus | 'idle' | 'loading' | 'resourceFailed' | 'wasmFailed';
@@ -27,7 +28,9 @@ interface ViewOptions {
   onState: (state: TerminalViewState) => void;
 }
 
-export interface TerminalViewMount {
+export interface TerminalViewMount
+  extends Pick<RioScreen, 'search' | 'clearSearch'> {
+  focusTerminal(): void;
   retry(focusInput?: boolean): void;
   setPreferences(preferences: EffectiveRioPreferences): void;
   syncTabState(): void;
@@ -53,7 +56,7 @@ export function mountTerminalView(options: ViewOptions): TerminalViewMount {
       const { active, visible } = options.tabState();
       const allowed = active && visible && !request.signal.aborted;
       cancelFocus();
-      if (allowed) attempt?.focusIfInteractive();
+      if (allowed) attempt?.getScreen()?.focusIfInteractive();
     });
   }
   const start = (reload: boolean) =>
@@ -82,6 +85,20 @@ export function mountTerminalView(options: ViewOptions): TerminalViewMount {
   }
   syncTabState();
   return {
+    search(query, direction) {
+      const { active, visible } = options.tabState();
+      return (
+        (active && visible
+          ? attempt?.getScreen()?.search(query, direction)
+          : undefined) ?? EMPTY_SEARCH_RESULT
+      );
+    },
+    clearSearch: () => attempt?.getScreen()?.clearSearch(),
+    focusTerminal() {
+      const { active, visible } = options.tabState();
+      if (active && visible && status === 'connected')
+        attempt?.getScreen()?.focusIfInteractive();
+    },
     retry(focusInput = false) {
       // An old button event must not reopen an exited shell or take control from a hidden tab.
       if (!options.tabState().visible) return;
@@ -117,8 +134,8 @@ function startAttempt(
   onState: ViewOptions['onState'],
 ):
   | (Pick<TerminalViewMount, 'setPreferences' | 'dispose'> & {
+      getScreen(): RioScreen | undefined;
       setVisible(visible: boolean): void;
-      focusIfInteractive(): void;
       reconnect(focusInput: boolean): boolean;
     })
   | undefined {
@@ -175,7 +192,7 @@ function startAttempt(
     });
 
   return {
-    focusIfInteractive: () => screen?.focusIfInteractive(),
+    getScreen: () => screen,
     reconnect(focusInput) {
       if (!attachment?.reconnect()) return false;
       // Transfer focus during the click, never when a late snapshot arrives.

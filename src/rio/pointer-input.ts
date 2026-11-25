@@ -110,7 +110,7 @@ export function bindPointerInput(
         event.clientX,
         event.clientY,
       );
-      core.term.selectionBegin(
+      core.beginPointerSelection(
         row,
         col,
         event.detail >= 3

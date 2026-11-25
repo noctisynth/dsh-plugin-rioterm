@@ -68,6 +68,25 @@ test('the emitted stylesheet has no document selectors, unowned properties, impo
   );
 });
 
+test('search feedback animation and borderless inset utilities compile inside the Rio scope', () => {
+  assertCompiled(
+    'rio:animate-search-spin rio:motion-reduce:animate-none rio:pe-[min(7rem,50%)] rio:max-w-[calc(50%_-_0.5rem)] rio:border-0 rio:bg-transparent',
+  );
+  const sheet = postcss.parse(css);
+  const animations = [];
+  sheet.walkAtRules('keyframes', (rule) => animations.push(rule));
+  const spin = animations.find((rule) => rule.params === 'rio-search-spin');
+  assert.ok(spin, 'the loading indicator must have an emitted animation');
+  assert.equal(spin.parent.name, 'scope');
+  assert.equal(spin.parent.params, '([data-rio-ui])');
+  const reductions = [];
+  sheet.walkAtRules('media', (rule) => {
+    if (rule.params.includes('prefers-reduced-motion:reduce'))
+      rule.walkDecls('animation', (decl) => reductions.push(decl.value));
+  });
+  assert.ok(reductions.includes('none'));
+});
+
 test('component class overrides merge by variant without changing unprefixed host classes', () => {
   assert.equal(
     cn('host-button rio:px-3 rio:hover:bg-primary', false, [

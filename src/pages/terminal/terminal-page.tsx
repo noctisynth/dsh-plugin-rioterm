@@ -4,6 +4,7 @@ import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import type { TerminalSession } from '../../terminal/contracts.ts';
 import type { TerminalTranslate } from './messages.ts';
 import { TerminalNotice } from './terminal-notice.tsx';
+import { TerminalSearch } from './terminal-search.tsx';
 import { useTerminalMount } from './use-terminal-mount.ts';
 
 interface TerminalPageProps {
@@ -28,7 +29,7 @@ export function TerminalPage({
   t,
 }: TerminalPageProps): React.ReactElement {
   const [requested, setRequested] = React.useState<string>();
-  const { containerRef, preferences, state, retry } = useTerminalMount({
+  const mount = useTerminalMount({
     appearance,
     session,
     visible,
@@ -37,6 +38,7 @@ export function TerminalPage({
     inputLabel: t('input'),
     linkPrompt: t('openLink'),
   });
+  const { containerRef, preferences, state, retry } = mount;
 
   return (
     <section
@@ -68,6 +70,20 @@ export function TerminalPage({
       <span role="status" className="rio:sr-only">
         {visible && state.status === 'connected' ? t('ready') : null}
       </span>
+      {visible &&
+        active &&
+        state.status !== 'idle' &&
+        state.status !== 'resourceFailed' &&
+        state.status !== 'wasmFailed' && (
+          <TerminalSearch
+            search={mount.search}
+            clearSearch={mount.clearSearch}
+            focusTerminal={mount.focusTerminal}
+            searchRevision={mount.searchRevision}
+            status={state.status}
+            t={t}
+          />
+        )}
       <TerminalNotice
         state={state}
         t={t}

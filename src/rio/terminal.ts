@@ -3,8 +3,16 @@ import {
   defaultEffectivePreferences,
   type EffectiveRioPreferences,
 } from '../preferences/values.ts';
+import {
+  EMPTY_SEARCH_RESULT,
+  type TerminalSearch,
+  type TerminalSearchDirection,
+} from '../terminal/search.ts';
+import { RioOutputSearch } from './output-search.ts';
 
 export interface RioTerminalOptions {
+  /** Edge-triggered; the view may coalesce refreshes or wait for navigation. */
+  onSearchInvalidated?(): void;
   onInput(data: string, typed: boolean): void;
   onResize(cols: number, rows: number): void;
   cols?: number;
@@ -21,8 +29,9 @@ export interface RioTerminalOptions {
 // keypress: a DSR in the next output frame is never a human taking control.
 type Source = 'silent' | 'protocol' | 'gesture' | 'wheel';
 
-export class RioTerminal {
+export class RioTerminal implements TerminalSearch {
   term: Terminal;
+  private readonly outputSearch = new RioOutputSearch();
   writable = false;
   visible = true;
   private source: Source = 'silent';
@@ -112,10 +121,33 @@ export class RioTerminal {
       this.term.dispose();
       this.term = next;
     });
+    this.invalidateSearch(true);
+  }
+
+  private invalidateSearch(replaced = false): void {
+    if (this.outputSearch.invalidate(replaced))
+      this.options.onSearchInvalidated?.();
+  }
+
+  search(query: string, direction: TerminalSearchDirection) {
+    return this.stopped
+      ? EMPTY_SEARCH_RESULT
+      : this.outputSearch.search(this.term, query, direction);
+  }
+
+  clearSearch(): void {
+    if (!this.stopped) this.outputSearch.clear(this.term);
+  }
+
+  beginPointerSelection(...args: Parameters<Terminal['selectionBegin']>): void {
+    this.outputSearch.pointerSelecting();
+    this.term.selectionBegin(...args);
   }
 
   write(data: string): void {
-    if (!this.stopped) this.during('protocol', () => this.term.write(data));
+    if (this.stopped || !data) return;
+    this.during('protocol', () => this.term.write(data));
+    this.invalidateSearch();
   }
 
   get interactive(): boolean {
@@ -198,12 +230,15 @@ export class RioTerminal {
     if (
       !this.stopped &&
       (cols !== this.term.options.cols || rows !== this.term.options.rows)
-    )
+    ) {
       this.term.resize(cols, rows);
+      this.invalidateSearch();
+    }
   }
 
   dispose(): void {
     if (!this.stopped) {
+      this.clearSearch();
       this.stopped = true;
       this.term.dispose();
     }
