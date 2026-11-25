@@ -1,7 +1,7 @@
 /* No Preflight, global theme or app-wide dark class. DSH owns the document. */
 @import "tailwindcss/theme.css" theme(inline) prefix(rio);
 @source "../components/ui";
-@source "../pages/terminal";
+@source "../pages";
 @source "../rio";
 
 @theme inline {

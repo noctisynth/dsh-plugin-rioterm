@@ -74,8 +74,31 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
   const closeHandlers = [];
   const disposers = [];
   const operations = [];
+  const accepted = {
+    status: 'ready',
+    value: {},
+    user: {},
+    revision: 1,
+    writable: true,
+  };
+  const hostTheme = {
+    revision: 0,
+    fontSizes: { terminal: 13 },
+    fontFamilies: { terminal: '"Host Mono"' },
+  };
   client.apply({
     effect: (fn) => disposers.push(fn()),
+    configForms: {
+      get: () => ({
+        getSnapshot: () => accepted,
+        subscribe: () => noop,
+      }),
+      whileServed: (_names, register) => register(new Set([manifest.name])),
+    },
+    theme: {
+      getTheme: () => hostTheme,
+    },
+    on: () => noop,
     remote: {
       terminal: new Proxy(
         {},
@@ -121,6 +144,28 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
       ['rio-terminal'],
     );
     assert.deepEqual(closeHandlers, ['rio-terminal']);
+    const settings = slots.get('plugins.bundle.config');
+    assert.equal(settings?.def.key, manifest.name);
+    const settingsView = TestRenderer.create(
+      React.createElement(settings.render, {
+        ...settings.def.inject(),
+        view: 'page',
+        t: (key) => key,
+      }),
+    );
+    try {
+      assert.equal(
+        settingsView.root.findAll(
+          (n) =>
+            typeof n.type === 'string' &&
+            n.props['data-rio-ui'] === 'preferences',
+        ).length,
+        1,
+      );
+      assert.deepEqual(operations, []); // Visiting the bundle never probes a shell.
+    } finally {
+      settingsView.unmount();
+    }
     const slot = slots.get('sidebar.right.tab.guide.entry');
     assert.equal(slot.def.key, manifest.name);
     const opened = [];

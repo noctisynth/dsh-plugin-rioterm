@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const routePath = '/dsh-plugin-rioterm/wasm/0.1.8.wasm';
 const owner = {
@@ -15,10 +14,20 @@ const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 // Isolate each build layout: never alter the real bundled asset, and never
 // require a DSH profile, network, or a server listening on a developer port.
 async function host(t, admit, withAsset = true) {
-  const dir = await mkdtemp(join(tmpdir(), 'dsh-rioterm-test-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const entry = join(dir, 'index.mjs');
-  await copyFile(new URL('../lib/index.js', import.meta.url), entry);
+  // Keep the copy in this package's module-resolution scope, excluding the real asset.
+  const prefix = fileURLToPath(
+    new URL('../.host-route-test-', import.meta.url),
+  );
+  const dir = await mkdtemp(prefix);
+  t.after(() => {
+    assert.ok(dir.startsWith(prefix) && dir.length === prefix.length + 6);
+    return rm(dir, { recursive: true, force: true });
+  });
+  const entry = join(dir, 'index.js');
+  await cp(new URL('../lib/', import.meta.url), dir, {
+    recursive: true,
+    filter: (path) => !/\.(wasm|map)$|client\.js$/.test(path),
+  });
   if (withAsset) await writeFile(join(dir, 'rioterm-0.1.8.wasm'), wasmBytes);
   const plugin = await import(pathToFileURL(entry).href);
   assert.deepEqual(plugin.inject, ['webServer', 'connection']);
@@ -26,6 +35,7 @@ async function host(t, admit, withAsset = true) {
   let dispose;
   let removed = false;
   plugin.apply({
+    inject: () => {}, // No settings provider in this resource-only fixture.
     connection: { admit },
     webServer: {
       register(value) {

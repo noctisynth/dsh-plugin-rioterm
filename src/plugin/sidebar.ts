@@ -1,4 +1,6 @@
 import { terminalMessages } from '../pages/terminal/messages.ts';
+import type { Observable } from '../preferences/editor.ts';
+import type { EffectiveRioPreferences } from '../preferences/values.ts';
 import type { RioSessions } from '../session/registry.ts';
 import { errorMessage } from '../terminal/error-message.ts';
 import { RIO_TAB_KIND } from '../terminal/identity.ts';
@@ -13,6 +15,7 @@ const pageSlot = 'sidebar.right.pane.tab';
 export function registerTerminalSidebar(
   ctx: ClientContext,
   sessions: RioSessions,
+  appearance: Observable<EffectiveRioPreferences>,
 ): void {
   ctx.effect(
     () => ctx.locale.register(namespace, terminalMessages),
@@ -84,6 +87,7 @@ export function registerTerminalSidebar(
             locale: namespace,
             inject: (sessionId) => ({
               issueLaunch: () => sessions.issue(sessionId),
+              appearance,
               session: (contentId: string) =>
                 sessions.get(sessionId, contentId),
             }),

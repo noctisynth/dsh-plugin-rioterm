@@ -2,6 +2,8 @@ import { createElement } from 'react';
 import type { TerminalTranslate } from '../pages/terminal/messages.ts';
 import { TerminalGuide } from '../pages/terminal/terminal-guide.tsx';
 import { TerminalPage } from '../pages/terminal/terminal-page.tsx';
+import type { Observable } from '../preferences/editor.ts';
+import type { EffectiveRioPreferences } from '../preferences/values.ts';
 import type { TerminalSession } from '../terminal/contracts.ts';
 import { RIO_TAB_KIND } from '../terminal/identity.ts';
 import type { SidebarTab } from './context.ts';
@@ -16,6 +18,7 @@ interface GuideSlotProps extends TabSlotProps {
   description?: string;
 }
 interface PageSlotProps extends TabSlotProps {
+  appearance: Observable<EffectiveRioPreferences>;
   t: TerminalTranslate;
   session(contentId: string): TerminalSession;
 }
@@ -46,11 +49,13 @@ export function PageSlot({
   issueLaunch,
   t,
   session,
+  appearance,
 }: PageSlotProps) {
   const { tab } = useTabInfo();
   return createElement(TerminalPage, {
     key: tab.contentId,
     session: session(tab.contentId),
+    appearance,
     visible: tab.visible,
     launchTicket: tab.navigation.params?.rioLaunch,
     issueLaunch,

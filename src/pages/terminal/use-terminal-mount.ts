@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Observable } from '../../preferences/editor.ts';
+import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import { createRioScreen } from '../../rio/screen.ts';
 import { loadWasm } from '../../rio/wasm-loader.ts';
 import type { TerminalSession } from '../../terminal/contracts.ts';
@@ -9,27 +11,40 @@ import {
 } from './terminal-mount.ts';
 
 interface MountOptions {
+  appearance: Observable<EffectiveRioPreferences>;
   session: TerminalSession;
   visible: boolean;
   ticket: string | undefined;
   attempt: number;
   inputLabel: string;
+  linkPrompt: string;
 }
 
 export function useTerminalMount({
+  appearance,
   session,
   visible,
   ticket,
   attempt,
   inputLabel,
+  linkPrompt,
 }: MountOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<TerminalViewState>({ status: 'loading' });
   const active = useRef<TerminalViewMount>();
   const visibleRef = useRef(visible);
-  const labelRef = useRef(inputLabel);
+  const labelRef = useRef({ inputLabel, linkPrompt });
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
+  // Subscribe separately from mount: a preference change isn't a new attachment.
+  useEffect(() => {
+    const sync = () => active.current?.setPreferences(appearance.getSnapshot());
+    const off = appearance.subscribe(sync);
+    sync();
+    return off;
+  }, [appearance]);
   visibleRef.current = visible;
-  labelRef.current = inputLabel;
+  labelRef.current = { inputLabel, linkPrompt };
 
   // Restored tabs wait for the first reveal. Later hides don't detach or reacquire input.
   const [started, setStarted] = useState(visible);
@@ -48,12 +63,14 @@ export function useTerminalMount({
       loadEngine: () => loadWasm(attempt > 0),
       createScreen: (limits, input) =>
         createRioScreen(container, {
+          preferences: appearanceRef.current.getSnapshot(),
           maxCols: limits.maxCols,
           maxRows: limits.maxRows,
           scrollback: limits.scrollback,
           onInput: input.input,
           onResize: input.resize,
-          label: labelRef.current,
+          label: labelRef.current.inputLabel,
+          linkPrompt: labelRef.current.linkPrompt,
         }),
       onState: setState,
     });

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Rio 终端",
-    "description": "在右侧栏打开「Rio 终端」，用 Rio 运行当前会话工作目录中的交互式用户 shell。与 DSH 默认终端并存。"
+    "description": "在右侧栏打开「Rio 终端」，用 Rio 运行当前会话工作目录中的交互式用户 shell。与 DSH 内置终端并存；可在插件详情中设置字体、配色和输入行为。"
   }
 }

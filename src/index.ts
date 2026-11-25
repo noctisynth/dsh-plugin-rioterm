@@ -1,4 +1,10 @@
 import { open } from 'node:fs/promises';
+import {
+  configurePreferencePage,
+  type PreferenceHost,
+} from './host/preferences.ts';
+
+export { Config } from './host/preferences.ts';
 
 const route = '/dsh-plugin-rioterm/wasm/0.1.8.wasm';
 const wasm = new URL('./rioterm-0.1.8.wasm', import.meta.url);
@@ -9,7 +15,7 @@ interface Peer {
   readonly principal: { readonly kind: string };
   readonly signal: AbortSignal;
 }
-interface Host {
+interface Host extends PreferenceHost {
   connection: {
     admit(request: Request): { peer: Peer } | { rejection: 401 | 403 };
   };
@@ -71,6 +77,7 @@ async function serve(request: Request): Promise<Response> {
 export const inject = ['webServer', 'connection'];
 
 export function apply(ctx: Host): void {
+  configurePreferencePage(ctx);
   ctx.effect(
     () =>
       ctx.webServer.register({

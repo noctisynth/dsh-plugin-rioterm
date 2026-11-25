@@ -43,6 +43,7 @@ function fixture() {
       events.push(['screen', limits]);
       return {
         setVisible: (value) => events.push(['screen visible', value]),
+        setPreferences: (value) => events.push(['render preferences', value]),
         dispose: () => events.push('dispose'),
       };
     },
@@ -113,6 +114,10 @@ test('one mount forwards visibility and input only to its attachment and release
     ['screen', limits],
     ['screen visible', false],
     ['mount', 'launch-once', limits, false],
+  ]);
+  view.setPreferences({ fontSize: 18 });
+  assert.deepEqual(f.events.splice(0), [
+    ['render preferences', { fontSize: 18 }],
   ]);
   view.setVisible(true);
   f.panel.status('connected');

@@ -1,4 +1,4 @@
-import type { DOMRenderer } from 'rioterm';
+import type { RioRenderer } from './renderer.ts';
 import type { RioTerminal } from './terminal.ts';
 
 // Chromium and WebKit disagree on whether final input precedes compositionend.
@@ -41,9 +41,13 @@ export class RioTextInput {
 export function bindKeyboardInput(
   root: HTMLElement,
   core: RioTerminal,
-  cells: () => Pick<DOMRenderer, 'cellWidth' | 'cellHeight'>,
+  renderer: () => Pick<
+    RioRenderer,
+    'cellWidth' | 'cellHeight' | 'userInput' | 'resetPredictions'
+  >,
   label: string,
   signal: AbortSignal,
+  autoFocus = false,
 ) {
   const editing = new RioTextInput();
   const input = root.ownerDocument.createElement('textarea');
@@ -58,19 +62,43 @@ export function bindKeyboardInput(
     'rio:absolute rio:top-0 rio:left-0 rio:h-[1em] rio:w-px rio:resize-none rio:border-0 rio:p-0 rio:opacity-0 rio:pointer-events-none';
   root.append(input);
   const events = { signal };
+  const doc = root.ownerDocument;
+  const vacant = () => !doc.activeElement || doc.activeElement === doc.body;
+  let initialFocus = autoFocus && vacant();
+  const cancelAutoFocus = () => {
+    initialFocus = false;
+  };
+  if (initialFocus) {
+    // A pending WASM/snapshot mount must not steal focus back from Settings or another tab.
+    doc.addEventListener('focusin', cancelAutoFocus, {
+      ...events,
+      capture: true,
+      once: true,
+    });
+    doc.defaultView?.addEventListener('blur', cancelAutoFocus, {
+      ...events,
+      once: true,
+    });
+  }
   const reset = () => {
     editing.reset();
     input.value = '';
+    renderer().resetPredictions();
+  };
+  const positionComposition = () => {
+    if (!editing.composing) return;
+    const pos = core.term.cursorPosition();
+    const { cellWidth, cellHeight } = renderer();
+    input.style.left = `${Math.max(0, pos.col) * cellWidth}px`;
+    input.style.top = `${Math.max(0, pos.line) * cellHeight}px`;
   };
   input.addEventListener(
     'compositionstart',
     () => {
       if (!core.interactive) return;
+      renderer().resetPredictions();
       editing.start();
-      const pos = core.term.cursorPosition();
-      const { cellWidth, cellHeight } = cells();
-      input.style.left = `${Math.max(0, pos.col) * cellWidth}px`;
-      input.style.top = `${Math.max(0, pos.line) * cellHeight}px`;
+      positionComposition();
     },
     events,
   );
@@ -91,13 +119,15 @@ export function bindKeyboardInput(
         editing.composing
       )
         return;
-      core.text(
-        editing.input(
-          event.data ?? input.value,
-          event.inputType,
-          event.isComposing,
-        ),
+      const text = editing.input(
+        event.data ?? input.value,
+        event.inputType,
+        event.isComposing,
       );
+      if (text) {
+        renderer().resetPredictions();
+        core.text(text);
+      }
       input.value = '';
     },
     events,
@@ -176,7 +206,7 @@ export function bindKeyboardInput(
       event.stopPropagation();
       return;
     }
-    if (core.key(event)) {
+    if (core.key(event, (bytes) => renderer().userInput(bytes))) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -185,6 +215,22 @@ export function bindKeyboardInput(
   input.addEventListener('keyup', key, events);
   return {
     reset,
+    positionComposition,
+    cancelAutoFocus,
+    offerAutoFocus() {
+      if (!initialFocus || !core.interactive) return;
+      cancelAutoFocus();
+      if (
+        !signal.aborted &&
+        vacant() &&
+        doc.hasFocus() &&
+        !doc.hidden &&
+        root.getClientRects().length &&
+        !root.closest('[inert], [hidden], [aria-hidden="true"]')
+      ) {
+        input.focus({ preventScroll: true });
+      }
+    },
     setWritable(writable: boolean) {
       input.readOnly = !writable;
       if (!writable) reset();

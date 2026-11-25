@@ -6,6 +6,7 @@ import { apply } from '../lib/index.js';
 test('the production host resource initializes Rio and parses wide characters', async () => {
   let route;
   apply({
+    inject: () => {}, // The settings provider is optional for WASM delivery.
     effect: (register) => register(),
     webServer: {
       register(value) {

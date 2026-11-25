@@ -22,6 +22,7 @@ const en = {
   reconnect: 'Reconnect',
   new: 'Open a new Rio terminal',
   input: 'Rio terminal input',
+  openLink: 'Open the following address outside the terminal?',
 };
 
 type MessageKey = keyof typeof en;
@@ -49,6 +50,7 @@ const zh = {
   reconnect: '重新连接',
   new: '打开新的 Rio 终端',
   input: 'Rio 终端输入',
+  openLink: '要在终端外打开以下地址吗？',
 } satisfies Record<MessageKey, string>;
 
 export const terminalMessages = { en, zh };

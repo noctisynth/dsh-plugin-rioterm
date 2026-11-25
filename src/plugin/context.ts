@@ -1,9 +1,7 @@
 import type { ReactElement } from 'react';
-import type {
-  TerminalTranslate,
-  terminalMessages,
-} from '../pages/terminal/messages.ts';
+import type { TerminalTranslate } from '../pages/terminal/messages.ts';
 import type { TerminalRemote } from '../session/remote.ts';
+import type { PreferenceConfigForms } from './preferences.ts';
 
 // Structural types for the DSH client services this bundle consumes. Never
 // bundle a second DSH client or pass the application context to a page.
@@ -22,8 +20,20 @@ export interface SidebarTab {
 export interface ClientContext {
   effect(register: () => Dispose, label: string): void;
   remote: { terminal: TerminalRemote };
+  theme: {
+    getTheme(): {
+      revision: number;
+      fontFamilies: { terminal: string };
+      fontSizes: { terminal: number };
+    };
+  };
+  on(event: 'theme/change', listener: () => void): Dispose;
+  configForms: PreferenceConfigForms;
   locale: {
-    register(namespace: string, messages: typeof terminalMessages): Dispose;
+    register(
+      namespace: string,
+      messages: { en: Record<string, string>; zh: Record<string, string> },
+    ): Dispose;
     bind(namespace: string): TerminalTranslate;
   };
   slots: {

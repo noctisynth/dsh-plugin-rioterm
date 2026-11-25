@@ -1,3 +1,4 @@
+import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import type { RioScreen } from '../../rio/screen.ts';
 import { ResourceError } from '../../rio/wasm-loader.ts';
 import type {
@@ -26,6 +27,7 @@ interface ViewOptions {
 }
 
 export interface TerminalViewMount {
+  setPreferences(preferences: EffectiveRioPreferences): void;
   setVisible(visible: boolean): void;
   dispose(): void;
 }
@@ -90,6 +92,9 @@ export function mountTerminalView({
     });
 
   return {
+    setPreferences(preferences) {
+      screen?.setPreferences(preferences);
+    },
     setVisible(visible) {
       screen?.setVisible(visible);
       attachment?.setVisible(visible);

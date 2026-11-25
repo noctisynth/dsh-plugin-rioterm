@@ -1,10 +1,13 @@
 import * as React from 'react';
+import type { Observable } from '../../preferences/editor.ts';
+import type { EffectiveRioPreferences } from '../../preferences/values.ts';
 import type { TerminalSession } from '../../terminal/contracts.ts';
 import type { TerminalTranslate } from './messages.ts';
 import { TerminalNotice } from './terminal-notice.tsx';
 import { useTerminalMount } from './use-terminal-mount.ts';
 
 interface TerminalPageProps {
+  appearance: Observable<EffectiveRioPreferences>;
   session: TerminalSession;
   visible: boolean;
   launchTicket: string | undefined;
@@ -14,6 +17,7 @@ interface TerminalPageProps {
 }
 
 export function TerminalPage({
+  appearance,
   session,
   visible,
   launchTicket,
@@ -24,11 +28,13 @@ export function TerminalPage({
   const [requested, setRequested] = React.useState<string>();
   const [attempt, setAttempt] = React.useState(0);
   const { containerRef, state } = useTerminalMount({
+    appearance,
     session,
     visible,
     ticket: requested ?? launchTicket,
     attempt,
     inputLabel: t('input'),
+    linkPrompt: t('openLink'),
   });
 
   return (

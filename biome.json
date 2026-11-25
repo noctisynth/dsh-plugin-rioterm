@@ -20,6 +20,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/preferences/**",
+                      "**/host/**",
                       "**/pages/**",
                       "**/plugin/**",
                       "**/rio/**",
@@ -49,6 +51,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/host/**",
                       "**/plugin/**",
                       "**/session/**",
                       "**/client.ts",
@@ -65,7 +68,7 @@
       }
     },
     {
-      "includes": ["src/session/**", "src/terminal/**"],
+      "includes": ["src/session/**", "src/terminal/**", "src/preferences/**"],
       "linter": {
         "rules": {
           "style": {
@@ -75,6 +78,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/host/**",
                       "**/components/**",
                       "**/lib/cn*",
                       "**/pages/**",
@@ -87,7 +91,7 @@
                       "react/**",
                       "rioterm"
                     ],
-                    "message": "Session and contract code must run without UI, Rio or the DSH runtime."
+                    "message": "Session, preference model and contract code must run without UI, Rio or the DSH runtime."
                   }
                 ]
               }
@@ -107,6 +111,7 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/host/**",
                       "**/components/**",
                       "**/lib/cn*",
                       "**/plugin/**",

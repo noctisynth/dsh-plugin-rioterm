@@ -1,4 +1,8 @@
 import { handleKeyboardEvent, Terminal } from 'rioterm';
+import {
+  defaultEffectivePreferences,
+  type EffectiveRioPreferences,
+} from '../preferences/values.ts';
 
 export interface RioTerminalOptions {
   onInput(data: string, typed: boolean): void;
@@ -7,7 +11,9 @@ export interface RioTerminalOptions {
   rows?: number;
   maxCols?: number;
   maxRows?: number;
+  /** Host limit, not a request to change the running ring buffer. */
   scrollback?: number;
+  preferences?: EffectiveRioPreferences;
 }
 
 // Rio 0.1.8 emits both user input and protocol responses synchronously through
@@ -20,8 +26,10 @@ export class RioTerminal {
   writable = false;
   visible = true;
   private source: Source = 'silent';
+  private keyBytes: Uint8Array[] | undefined;
   private stopped = false;
   private readonly options: RioTerminalOptions;
+  private preferences: EffectiveRioPreferences;
   private readonly decode = new TextDecoder('utf-8', {
     fatal: true,
     ignoreBOM: true,
@@ -29,15 +37,23 @@ export class RioTerminal {
 
   constructor(options: RioTerminalOptions) {
     this.options = options;
+    this.preferences = options.preferences ?? defaultEffectivePreferences;
     this.term = this.create(options.cols ?? 80, options.rows ?? 24);
   }
 
   private create(cols: number, rows: number): Terminal {
+    const limit = this.options.scrollback ?? 1000;
     const term = new Terminal({
       cols,
       rows,
-      scrollback: this.options.scrollback ?? 1000,
+      convertEol: false, // DSH supplies real PTY output, including its own CR/LF discipline.
+      detectUrls: this.preferences.detectUrls,
+      scrollback: Math.max(
+        0,
+        Math.min(this.preferences.scrollback ?? limit, limit),
+      ),
     });
+    term.setAltIsMeta(this.preferences.altIsMeta);
     term.onData((bytes) => {
       if (this.stopped || !this.writable || this.source === 'silent') return;
       // DSH transports UTF-8 strings, not a raw 8-bit channel. Do not send
@@ -48,19 +64,37 @@ export class RioTerminal {
       } catch {
         return;
       }
-      if (data) this.options.onInput(data, this.source === 'gesture');
+      if (!data) return;
+      this.keyBytes?.push(bytes.slice());
+      this.options.onInput(data, this.source === 'gesture');
     });
     return term;
   }
 
-  private during<T>(source: Source, action: () => T): T {
+  private during<T>(
+    source: Source,
+    action: () => T,
+    keyBytes?: Uint8Array[],
+  ): T {
     const previous = this.source;
+    const previousBytes = this.keyBytes;
     this.source = source;
+    this.keyBytes = keyBytes;
     try {
       return action();
     } finally {
       this.source = previous;
+      this.keyBytes = previousBytes;
     }
+  }
+
+  setPreferences(next: EffectiveRioPreferences): void {
+    if (this.stopped) return;
+    if (next.altIsMeta !== this.preferences.altIsMeta)
+      this.term.setAltIsMeta(next.altIsMeta);
+    // linkAt() consults this public option on every plain-text hit test in 0.1.8.
+    this.term.options.detectUrls = next.detectUrls;
+    this.preferences = next; // scrollback is consumed only by the next fresh parser.
   }
 
   snapshot(cols: number, rows: number, data: string): void {
@@ -88,10 +122,30 @@ export class RioTerminal {
     return !this.stopped && this.visible && this.writable;
   }
 
-  key(event: KeyboardEvent): boolean {
+  get canFit(): boolean {
+    return this.interactive && this.preferences.fit;
+  }
+
+  key(event: KeyboardEvent, userInput?: (bytes: Uint8Array) => void): boolean {
     if (!this.interactive || event.isComposing || event.keyCode === 229)
       return false;
-    return this.during('gesture', () => handleKeyboardEvent(this.term, event));
+    // onData fires *inside* the WASM key encoder. A prediction querying the cursor
+    // there would re-enter a borrowed RioTerm. Deliver only this key's accepted
+    // bytes, synchronously after the encoder returns and before the next VT frame.
+    const keyBytes: Uint8Array[] | undefined =
+      userInput &&
+      this.preferences.renderer === 'canvas' &&
+      this.preferences.predictiveEcho
+        ? []
+        : undefined;
+    const handled = this.during(
+      'gesture',
+      () => handleKeyboardEvent(this.term, event),
+      keyBytes,
+    );
+    if (keyBytes && userInput && this.interactive)
+      for (const bytes of keyBytes) userInput(bytes);
+    return handled;
   }
 
   text(text: string, paste = false): void {
@@ -119,7 +173,7 @@ export class RioTerminal {
     cellHeight: number,
   ): void {
     if (
-      !this.interactive ||
+      !this.canFit ||
       width < cellWidth ||
       height < cellHeight ||
       cellWidth <= 0 ||
