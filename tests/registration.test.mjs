@@ -3,10 +3,12 @@ import { webcrypto } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
+import React from 'react';
+import TestRenderer from 'react-test-renderer';
 
 // DSH loads this as a classic script. Evaluating it must only register a
 // factory, without touching React, initializing WASM, or making requests.
-async function loadBundle() {
+async function loadBundle(document) {
   const manifest = JSON.parse(
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
@@ -18,6 +20,7 @@ async function loadBundle() {
   runInNewContext(script, {
     TextEncoder,
     TextDecoder,
+    ...(document ? { document } : {}),
     AbortController,
     setTimeout,
     clearTimeout,
@@ -44,13 +47,27 @@ test('the client registers lazily under the published package name', async () =>
 });
 
 test('loading the built plugin leaves existing terminals untouched; only its guide button issues a Rio launch ticket', async () => {
-  const { factory, manifest } = await loadBundle();
-  const client = factory(() => ({
-    createElement: (type, config) => {
-      const { key, ...props } = config ?? {};
-      return { type, key, props };
+  // Only model the stylesheet ownership port; no browser or live DSH session is touched.
+  const foreign = { dataset: { plugin: 'other-plugin' } };
+  const styles = new Set([foreign]);
+  const document = {
+    createElement(name) {
+      assert.equal(name, 'style');
+      const node = {
+        dataset: {},
+        textContent: '',
+        remove: () => styles.delete(node),
+      };
+      return node;
     },
-  }));
+    head: { appendChild: (node) => styles.add(node) },
+  };
+  const { factory, manifest } = await loadBundle(document);
+  const client = factory((name) => {
+    assert.equal(name, 'react');
+    return React;
+  });
+  assert.equal(styles.size, 1); // Merely loading or materializing the factory installs nothing.
   const noop = () => {};
   const slots = new Map();
   const tabTypes = [];
@@ -115,10 +132,14 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
       }),
     });
     assert.equal(guide.props.title, 'Rio');
-    const button = guide.type(guide.props);
-    assert.equal(button.type, 'button');
-    assert.equal(opened.length, 0);
-    button.props.onClick();
+    const guideView = TestRenderer.create(guide);
+    try {
+      const button = guideView.root.findByType('button');
+      assert.equal(opened.length, 0);
+      button.props.onClick();
+    } finally {
+      guideView.unmount();
+    }
     assert.equal(opened.length, 1);
     const [[kind, opts]] = opened;
     assert.equal(kind, 'rio-terminal');
@@ -144,9 +165,20 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     }
     assert.equal('tab' in page.props || 'useTabInfo' in page.props, false);
     assert.equal('session' in slot.def.inject('s'), false);
+    assert.equal(styles.size, 2);
+    const [sheet] = [...styles].filter((node) => node !== foreign);
+    assert.equal(sheet.dataset.plugin, manifest.name);
+    assert.equal(sheet.dataset.pluginCss, `${manifest.name}/terminal-ui`);
+    assert.match(sheet.textContent, /@scope\s*\(\[data-rio-ui\]\)/);
+    assert.ok(sheet.textContent.includes('.rio\\:absolute'));
+    assert.doesNotMatch(
+      sheet.textContent,
+      /:root|:host|--tw-|@import|@font-face/,
+    );
     assert.equal(opened.length, 1);
   } finally {
     for (const dispose of disposers.reverse()) dispose();
   }
+  assert.deepEqual([...styles], [foreign]);
   assert.deepEqual(operations, []);
 });

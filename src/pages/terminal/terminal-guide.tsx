@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Button } from '../../components/ui/button.tsx';
 import { RIO_TAB_KIND } from '../../terminal/identity.ts';
 
 interface TerminalGuideProps {
@@ -12,26 +13,27 @@ export function TerminalGuide({
   description,
   onOpen,
 }: TerminalGuideProps): React.ReactElement {
+  const descriptionId = React.useId();
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      data-rio-ui="guide"
       data-sidebar-right-guide-entry={RIO_TAB_KIND}
-      onClick={onOpen}
+      aria-label={title}
+      aria-describedby={description ? descriptionId : undefined}
       title={description}
-      style={{
-        width: '100%',
-        textAlign: 'start',
-        cursor: 'pointer',
-        padding: '0.6em 0.9em',
-        font: 'inherit',
-        color: 'inherit',
-        background: 'transparent',
-        border: '1px solid currentColor',
-        borderRadius: 8,
-      }}
+      onClick={onOpen}
+      className="rio:min-h-14 rio:w-full rio:flex-col rio:items-start rio:gap-0.5 rio:rounded-lg rio:bg-muted rio:px-5 rio:py-3.5 rio:text-start rio:focus-visible:-outline-offset-2"
     >
-      {title}
-      {description && <small style={{ display: 'block' }}>{description}</small>}
-    </button>
+      <span className="rio:max-w-full">{title}</span>
+      {description && (
+        <span
+          id={descriptionId}
+          className="rio:max-w-full rio:text-xs rio:font-normal rio:text-muted-foreground"
+        >
+          {description}
+        </span>
+      )}
+    </Button>
   );
 }

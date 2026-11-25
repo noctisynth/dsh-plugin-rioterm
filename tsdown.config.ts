@@ -1,4 +1,12 @@
 import { defineConfig } from 'tsdown';
+import { compileUiStyles } from './build/ui-styles.ts';
+
+const bundled = [
+  'rioterm',
+  'class-variance-authority',
+  'clsx',
+  'tailwind-merge',
+];
 
 // DSH loads classic scripts: evaluating the artifact must only register the factory.
 // Inside the factory, CommonJS require resolves against the host's module table.
@@ -13,13 +21,16 @@ export default defineConfig({
   dts: false,
   sourcemap: false,
   deps: {
-    alwaysBundle: ['rioterm'],
-    onlyBundle: ['rioterm'],
-    neverBundle: ['react'],
+    alwaysBundle: bundled,
+    onlyBundle: bundled,
+    neverBundle: ['react', 'react-dom'],
   },
   // wasm-bindgen has an import.meta.url fallback. Our client always passes a Response;
   // don't synthesize a Node URL helper (or resolve the WASM relative to a combo script).
-  define: { 'import.meta.url': 'document.baseURI' },
+  define: {
+    'import.meta.url': 'document.baseURI',
+    __RIO_UI_CSS__: JSON.stringify(await compileUiStyles()),
+  },
   outputOptions: {
     entryFileNames: 'client.js',
     banner:

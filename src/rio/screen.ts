@@ -28,14 +28,9 @@ export function createRioScreen(
 ): RioScreen {
   const core = new RioTerminal(options);
   const root = container.ownerDocument.createElement('div');
-  Object.assign(root.style, {
-    position: 'relative',
-    width: '100%',
-    height: '100%',
-    // Rio, not the invisible IME textarea's browser viewport, owns scrollback.
-    overflow: 'clip',
-    outlineOffset: '-1px',
-  });
+  // Rio, not the invisible IME textarea's browser viewport, owns scrollback.
+  root.className = 'rio:relative rio:size-full rio:overflow-clip';
+  root.dataset.rioScreen = '';
   const makeRenderer = () => new DOMRenderer(core.term, { theme });
   let renderer: DOMRenderer;
   try {

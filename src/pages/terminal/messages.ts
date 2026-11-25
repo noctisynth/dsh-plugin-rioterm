@@ -4,6 +4,7 @@ const en = {
     'Open a new interactive user shell in this session’s working directory.',
   loading: 'Loading Rio…',
   opening: 'Connecting to your terminal…',
+  ready: 'Terminal connected. Ready for input.',
   idle: 'No shell has been started in this tab.',
   start: 'Start shell',
   control: 'Take input control',
@@ -14,7 +15,7 @@ const en = {
   missing:
     'This tab has no recoverable Rio process. No replacement shell was started.',
   wasmFailed:
-    'The Rio engine could not start. Fix the error and refresh this page.',
+    'The Rio engine could not start. After fixing the error, reload the entire DSH window, not just the terminal tab.',
   resourceFailed: 'Could not load the Rio engine.',
   details: 'Error details',
   retry: 'Retry',
@@ -31,6 +32,7 @@ const zh = {
   description: '在当前会话的工作目录中新建一个可交互的用户 shell。',
   loading: '正在加载 Rio…',
   opening: '正在连接终端…',
+  ready: '终端已连接，可以输入。',
   idle: '此标签尚未启动 shell。',
   start: '启动 shell',
   control: '取得输入控制权',
@@ -39,7 +41,8 @@ const zh = {
   failed: 'Shell 出错。',
   disconnected: '终端连接已中断。',
   missing: '此标签没有可恢复的 Rio 进程，未新建替代 shell。',
-  wasmFailed: 'Rio 引擎初始化失败。请解决错误后刷新页面。',
+  wasmFailed:
+    'Rio 引擎初始化失败。解决错误后，请重新加载整个 DSH 窗口，而不只是终端标签页。',
   resourceFailed: '无法加载 Rio 引擎。',
   details: '错误详情',
   retry: '重试',

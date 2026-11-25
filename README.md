@@ -21,6 +21,8 @@ pnpm build
 pnpm test
 ```
 
+React 界面使用 Tailwind CSS v4 和仓库内的 shadcn/ui 组件。只为 Rio 面板和引导编译样式，不加载 CDN，不给 DSH 页面引入 Preflight；主题色直接引用 DSH 的语义色。修改样式与控件时见[UI 约定](.agents/specs/terminal-modules.md#ui-样式与组件)。
+
 `pnpm typecheck` 使用锁定版本的 tsrs，以 `--noEmit` 检查源码与构建配置。`pnpm check` 先运行 Biome，再运行相同的类型检查。`pnpm build` 用 tsdown 打包客户端，用 `tsc --noCheck`（通过 Host 配置）仅转译宿主入口，并把与 JS 版本匹配的独立 WASM 复制到 `lib/`。`pnpm test` 在构建后运行。
 
 本地试用时先构建，再到 DSH 的插件管理中添加当前仓库目录。插件不依赖 CDN；如果页面策略阻止 WASM 编译，请检查错误提示，不要关闭安全策略。

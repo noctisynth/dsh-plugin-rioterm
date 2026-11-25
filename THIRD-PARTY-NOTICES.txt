@@ -1,7 +1,12 @@
-Rio / rioterm (https://github.com/raphamorim/riotermjs)
-MIT License
+The following components are used under the MIT License below:
 
-Copyright (c) 2022-present Raphael Amorim
+Rio / rioterm — Copyright (c) 2022-present Raphael Amorim
+Tailwind CSS — Copyright (c) Tailwind Labs, Inc.
+shadcn/ui — Copyright (c) 2023 shadcn (component conventions adapted for this plugin)
+clsx — Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
+tailwind-merge — Copyright (c) 2021 Dany Castillo
+
+MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,3 +25,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+class-variance-authority — Copyright 2022 Joe Bell.
+Licensed under Apache-2.0. Full license: docs/licenses/class-variance-authority.txt.

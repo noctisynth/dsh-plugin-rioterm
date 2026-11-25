@@ -34,28 +34,21 @@ export function TerminalPage({
   return (
     <section
       aria-label={t('title')}
-      aria-busy={state.status === 'loading' || state.status === 'opening'}
+      data-rio-ui="terminal"
       data-rio-terminal
-      style={{
-        position: 'relative',
-        isolation: 'isolate',
-        width: '100%',
-        height: '100%',
-        minHeight: 0,
-        minWidth: 0,
-        overflow: 'hidden',
-      }}
+      className="rio:relative rio:isolate rio:h-full rio:w-full rio:min-h-0 rio:min-w-0 rio:overflow-hidden rio:bg-background rio:text-foreground"
     >
-      {/* Keep the observed screen full-size even when the status notice wraps. */}
+      {/* ResizeObserver measures only this stable box, never the notice. */}
       <div
         ref={containerRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-          overflow: 'hidden',
-        }}
+        aria-busy={state.status === 'loading' || state.status === 'opening'}
+        data-rio-viewport
+        className="rio:absolute rio:inset-0 rio:z-0 rio:overflow-hidden"
       />
+      {/* A persistent, non-focusable live region announces readiness without covering the grid. */}
+      <span role="status" className="rio:sr-only">
+        {visible && state.status === 'connected' ? t('ready') : null}
+      </span>
       <TerminalNotice
         state={state}
         t={t}

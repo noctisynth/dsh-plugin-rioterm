@@ -1,0 +1,44 @@
+/* No Preflight, global theme or app-wide dark class. DSH owns the document. */
+@import "tailwindcss/theme.css" theme(inline) prefix(rio);
+@source "../components/ui";
+@source "../pages/terminal";
+@source "../rio";
+
+@theme inline {
+  --color-background: var(--dsw-alias-bg-base, Canvas);
+  --color-foreground: var(--dsw-alias-label-primary, CanvasText);
+  --color-muted: var(--dsw-alias-bg-layer-1, Canvas);
+  --color-muted-foreground: var(--dsw-alias-label-secondary, GrayText);
+  --color-border: var(--dsw-alias-border-l2, ButtonBorder);
+  --color-accent: var(--dsw-alias-interactive-bg-hover, ButtonFace);
+  --color-accent-foreground: var(--dsw-alias-label-primary, ButtonText);
+  --color-primary: var(--dsw-alias-button-primary-fill, Highlight);
+  --color-primary-hover: var(--dsw-alias-button-primary-hover, Highlight);
+  --color-primary-foreground: var(
+    --dsw-alias-label-primary-foreground,
+    HighlightText
+  );
+  --color-destructive: var(--dsw-alias-state-error-primary, MarkText);
+  --color-ring: var(
+    --dsw-focus-ring-color,
+    var(--dsw-alias-state-business-primary, Highlight)
+  );
+  --radius-sm: var(--dsw-radius-xs, 4px);
+  --radius-md: var(--dsw-radius-sm, 8px);
+  --radius-lg: var(--dsw-radius-xl, 20px);
+}
+
+/* Both roots (the guide button and terminal section) are themselves in scope. */
+@scope ([data-rio-ui]) {
+  /* biome-ignore lint/suspicious/noUnknownAtRules: emit Tailwind utilities inside the plugin scope, not on the document. */
+  @tailwind utilities source(none);
+
+  [data-rio-screen][data-rio-keyboard-focus] {
+    outline: 1px solid
+      var(
+        --dsw-focus-ring-color,
+        var(--dsw-alias-state-business-primary, Highlight)
+      );
+    outline-offset: -1px;
+  }
+}

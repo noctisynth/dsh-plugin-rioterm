@@ -12,6 +12,12 @@
 
 [共享契约](../../src/terminal/contracts.ts)是接口，不是另一个实现。页面可以挂载、取消自己的视图，不能直接关闭进程。一个窗口的注册表负责标签清单和关闭操作。Rio 只提议新尺寸；确认后的尺寸由会话和输出按顺序交给屏幕，不能为了让窗口“合身”先改网格。重连不签发新的启动许可，隐藏已挂载的页面也不等于结束 shell。
 
+## UI 样式与组件
+
+- 共享 Button 和 Alert 采用 shadcn/ui 源码组件模式，放在 [components/ui](../../src/components/ui/)；页面只组合控件、选择变体，文案仍从页面词典取。组件使用 `cn` 合并含 `rio:` 前缀的 Tailwind 类；不要在页面复制按钮样式或新增 `style={{…}}`。主题色和圆角在[局部样式源](../../src/styles/terminal.css)映射到宿主变量；字号用 Tailwind 的刻度，终端字体仍由 Rio 渲染器决定。
+- 一页只需要自己的 `data-rio-ui` 根。在[构建步骤](../../build/ui-styles.ts)将工具类和 Tailwind 的回退声明限制在这个范围；不发布全局 Preflight、`.dark` 或 `:root` 规则。[样式安装](../../src/plugin/ui-styles.ts)随插件 effect 创建和清理，同一文档的标签共享一份，客户端不请求单独的 CSS 文件。不要把其他插件的 DOM 放进这个范围。
+- Rio 的屏幕和隐藏输入框可以使用这里的工具类；输入法候选窗的左、上坐标依赖实时光标度量，不改成静态类。修改原生组件、通知或配色后运行 [UI 契约测试](../../tests/terminal-ui.test.mjs)；React 单元测试不代替在 DSH 中切换主题和使用键盘的人工验收。
+
 ## 如何守住这些边界
 
 - [Biome 跨层导入限制](../../biome.json)随 `pnpm check` 执行，页面不能依赖具体会话/插件实现；会话与 Rio 不互相导入，都不依赖 React。只服务于终端页的组件、hook 和文案就近维护，不建立通用 `utils` 或转发层。

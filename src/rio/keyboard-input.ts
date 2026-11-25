@@ -53,18 +53,9 @@ export function bindKeyboardInput(
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.readOnly = true;
-  Object.assign(input.style, {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    opacity: '0',
-    width: '1px',
-    height: '1em',
-    padding: '0',
-    border: '0',
-    resize: 'none',
-    pointerEvents: 'none',
-  });
+  // Keep the IME target focusable. Its pixel position follows Rio's measured grid.
+  input.className =
+    'rio:absolute rio:top-0 rio:left-0 rio:h-[1em] rio:w-px rio:resize-none rio:border-0 rio:p-0 rio:opacity-0 rio:pointer-events-none';
   root.append(input);
   const events = { signal };
   const reset = () => {
@@ -114,16 +105,17 @@ export function bindKeyboardInput(
   input.addEventListener(
     'focus',
     () => {
-      if (input.matches(':focus-visible'))
-        root.style.outline =
-          '1px solid var(--dsw-alias-label-primary, Highlight)';
+      root.toggleAttribute(
+        'data-rio-keyboard-focus',
+        input.matches(':focus-visible'),
+      );
     },
     events,
   );
   input.addEventListener(
     'blur',
     () => {
-      root.style.outline = '';
+      root.removeAttribute('data-rio-keyboard-focus');
       reset();
     },
     events,

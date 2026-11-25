@@ -1,5 +1,6 @@
 import type { ClientContext } from './plugin/context.ts';
 import { registerTerminalSidebar } from './plugin/sidebar.ts';
+import { installUiStyles } from './plugin/ui-styles.ts';
 import { RioSessions } from './session/registry.ts';
 
 export const inject = [
@@ -18,5 +19,6 @@ export function apply(ctx: ClientContext): void {
     () => () => sessions.dispose(),
     'dsh-plugin-rioterm: release attachments',
   );
+  ctx.effect(installUiStyles, 'dsh-plugin-rioterm: scoped UI stylesheet');
   registerTerminalSidebar(ctx, sessions);
 }

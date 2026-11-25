@@ -17,7 +17,7 @@ export function bindPointerInput(
     (event) => {
       if (event.button !== 0 || !core.visible) return;
       focus();
-      root.style.outline = '';
+      root.removeAttribute('data-rio-keyboard-focus');
       if (event.pointerType === 'touch') return;
       const { row, col, sideRight } = renderer().cellAt(
         event.clientX,

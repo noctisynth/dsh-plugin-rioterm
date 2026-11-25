@@ -1,6 +1,6 @@
 node_modules/
 dist/
-lib/
+/lib/
 .pnpm-store/
 *.tsbuildinfo
 .DS_Store

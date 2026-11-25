@@ -1,4 +1,10 @@
 import * as React from 'react';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '../../components/ui/alert.tsx';
+import { Button } from '../../components/ui/button.tsx';
 import type { TerminalTranslate } from './messages.ts';
 import type { TerminalViewState } from './terminal-mount.ts';
 
@@ -10,64 +16,74 @@ interface TerminalNoticeProps {
   onOpenNew: () => void;
 }
 
-export function TerminalNotice({
-  state: { status, detail },
+function noticeAction({
+  state: { status },
   t,
   onStart,
   onRetry,
   onOpenNew,
-}: TerminalNoticeProps): React.ReactElement | null {
+}: TerminalNoticeProps) {
+  switch (status) {
+    case 'idle':
+      return { label: t('start'), onClick: onStart };
+    case 'readonly':
+      return { label: t('control'), onClick: onRetry };
+    case 'resourceFailed':
+      return { label: t('retry'), onClick: onRetry };
+    case 'disconnected':
+      return { label: t('reconnect'), onClick: onRetry };
+    case 'exited':
+    case 'missing':
+    case 'failed':
+      return { label: t('new'), onClick: onOpenNew };
+    default:
+      return undefined;
+  }
+}
+
+export function TerminalNotice(
+  props: TerminalNoticeProps,
+): React.ReactElement | null {
+  const {
+    state: { status, detail },
+    t,
+  } = props;
   if (status === 'connected') return null;
 
+  const failed =
+    status === 'failed' ||
+    status === 'resourceFailed' ||
+    status === 'wasmFailed';
+  const action = noticeAction(props);
   return (
-    <div
-      style={{
-        position: 'absolute',
-        insetBlockStart: 4,
-        insetInlineEnd: 4,
-        maxWidth: 'calc(100% - 8px)',
-        maxHeight: 'calc(100% - 8px)',
-        boxSizing: 'border-box',
-        overflow: 'auto',
-        overflowWrap: 'anywhere',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '4px 8px',
-        flexWrap: 'wrap',
-        background: 'var(--dsw-alias-bg-base, Canvas)',
-        color: 'var(--dsw-alias-label-primary, CanvasText)',
-        border: '1px solid var(--dsw-alias-border-l1)',
-        borderRadius: 8,
-      }}
+    <Alert
+      role="group"
+      variant={failed ? 'destructive' : 'default'}
+      className="rio:absolute rio:top-2 rio:end-2 rio:z-10 rio:max-h-[min(calc(100%_-_1rem),max(6rem,50%))] rio:max-w-[min(24rem,calc(100%_-_1rem))] rio:overflow-auto rio:overscroll-contain"
     >
-      <span role="status">{t(status)}</span>
+      <div className="rio:flex rio:flex-wrap rio:items-center rio:gap-x-3 rio:gap-y-1.5">
+        {/* Announce the status, not the controls or the diagnostic disclosure. */}
+        <AlertTitle role={failed ? 'alert' : 'status'}>{t(status)}</AlertTitle>
+        {action && (
+          <Button
+            variant={status === 'idle' ? 'default' : 'outline'}
+            size="sm"
+            onClick={action.onClick}
+          >
+            {action.label}
+          </Button>
+        )}
+      </div>
       {detail && (
-        <details key={status}>
-          <summary style={{ cursor: 'pointer' }}>{t('details')}</summary>
-          <small>{detail}</small>
+        <details key={status} className="rio:mt-1.5">
+          <summary className="rio:box-border rio:min-h-7 rio:w-fit rio:max-w-full rio:cursor-pointer rio:rounded-sm rio:py-1.5 rio:text-xs rio:text-muted-foreground rio:focus-visible:outline-2 rio:focus-visible:outline-solid rio:focus-visible:outline-ring rio:focus-visible:outline-offset-2">
+            {t('details')}
+          </summary>
+          <AlertDescription className="rio:mt-1 rio:whitespace-pre-wrap">
+            {detail}
+          </AlertDescription>
         </details>
       )}
-      {status === 'idle' && (
-        <button type="button" onClick={onStart}>
-          {t('start')}
-        </button>
-      )}
-      {status === 'readonly' && (
-        <button type="button" onClick={onRetry}>
-          {t('control')}
-        </button>
-      )}
-      {(status === 'resourceFailed' || status === 'disconnected') && (
-        <button type="button" onClick={onRetry}>
-          {t(status === 'resourceFailed' ? 'retry' : 'reconnect')}
-        </button>
-      )}
-      {(status === 'exited' || status === 'missing' || status === 'failed') && (
-        <button type="button" onClick={onOpenNew}>
-          {t('new')}
-        </button>
-      )}
-    </div>
+    </Alert>
   );
 }

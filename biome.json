@@ -3,11 +3,41 @@
   "files": { "includes": ["**", "!.changes/*.md", "!CHANGELOG.md"] },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
   "linter": { "enabled": true },
+  "css": { "parser": { "tailwindDirectives": true } },
   "javascript": {
     "formatter": { "quoteStyle": "single" },
     "jsxRuntime": "reactClassic"
   },
   "overrides": [
+    {
+      "includes": ["src/components/ui/**", "src/lib/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/pages/**",
+                      "**/plugin/**",
+                      "**/rio/**",
+                      "**/session/**",
+                      "**/terminal/**",
+                      "**/client.ts",
+                      "@deepseek-ai/**",
+                      "rioterm"
+                    ],
+                    "message": "Shared UI primitives must not know about terminal pages, sessions or the host."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "includes": ["src/pages/**"],
       "linter": {
@@ -45,6 +75,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/components/**",
+                      "**/lib/cn*",
                       "**/pages/**",
                       "**/plugin/**",
                       "**/rio/**",
@@ -75,6 +107,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/components/**",
+                      "**/lib/cn*",
                       "**/plugin/**",
                       "**/pages/**",
                       "**/session/**",
