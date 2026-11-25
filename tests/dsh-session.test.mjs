@@ -18,6 +18,46 @@ function deferred() {
   });
   return { promise, resolve };
 }
+// A deterministic test driver: only TestCarrier permits a second physical
+// stream. Production delegates classification and retry timing to DSH $stream.
+class TestCarrier extends Error {}
+const eof = Symbol('EOF');
+function managed(options) {
+  const lifetime = new AbortController();
+  return {
+    async dispose() {
+      lifetime.abort();
+    },
+    async *[Symbol.asyncIterator]() {
+      for (let n = 1; ; n++) {
+        const ac = new AbortController();
+        const signal = AbortSignal.any([lifetime.signal, ac.signal]);
+        let accepted = false;
+        try {
+          for await (const value of options.open(signal)) {
+            if (signal.aborted) return;
+            yield {
+              generation: n,
+              signal,
+              value,
+              accept() {
+                accepted = true;
+              },
+            };
+          }
+          if (signal.aborted) return;
+          throw options.ended(accepted);
+        } catch (error) {
+          if (signal.aborted) return;
+          if (!(error instanceof TestCarrier) || n > 1) throw error;
+          options.carrierFailed(error);
+        } finally {
+          ac.abort();
+        }
+      }
+    },
+  };
+}
 function stream(signal) {
   const queue = [];
   let wake = deferred();
@@ -37,7 +77,10 @@ function stream(signal) {
     async *[Symbol.asyncIterator]() {
       while (!signal.aborted) {
         if (queue.length) {
-          yield queue.shift();
+          const value = queue.shift();
+          if (value instanceof Error) throw value;
+          if (value === eof) return;
+          yield value;
           continue;
         }
         wake = deferred();
@@ -139,7 +182,7 @@ const sid = 'session';
 const content = 'sidebar://rio-terminal/one';
 const tab = { sessionId: sid, contentId: content, kind: 'rio-terminal' };
 function fresh(t, h = host(), storage = store()) {
-  const mgr = new RioSessions(h.remote, () => storage);
+  const mgr = new RioSessions(h.remote, () => storage, managed);
   t.after(() => mgr.dispose());
   mgr.sync([tab]);
   return { mgr, h, storage, item: mgr.get(sid, content) };
@@ -289,7 +332,10 @@ test('bounded uplink, control revocation and protocol responses remain scoped to
   assert.equal(view.commands.length, 2);
   view.push({ type: 'output', sequence: 21, data: 'invalid' });
   await bind.done;
-  assert.equal(p.seen.at(-1)[0], 'disconnected');
+  assert.deepEqual(p.seen.at(-1), [
+    'readonly',
+    'Terminal output sequence gap.',
+  ]);
   assert.ok(!p.events.some((e) => e[1] === 'invalid'));
   assert.ok(view.signal.aborted);
 });
@@ -346,6 +392,192 @@ test('a persisted close request is retryable without creating or attaching anyth
   assert.equal(h.views.length, 1);
 });
 
+test('recovery waits for visibility and a still-current acknowledged hold on the same shell', {
+  timeout: 5000,
+}, async (t) => {
+  const { mgr, item, h } = fresh(t);
+  const p = panel();
+  const view = item.mount(mgr.issue(sid), limits, p);
+  assert.equal(view.reconnect(), false);
+  await p.wait('connected');
+  const old = h.views[0];
+  view.input('a'.repeat(20), true);
+  view.input('b'.repeat(20), true);
+  view.setVisible(false);
+  old.push(new TestCarrier('socket closed'));
+  await p.wait('reconnecting');
+  view.input('offline', true);
+  const replacementHold = deferred();
+  h.remote.retain = (_session, id, signal) => {
+    assert.equal(id, h.creates[0]);
+    const s = stream(signal);
+    replacementHold.resolve(s);
+    return s;
+  };
+  // The previous hold is lost after recovery started waiting for visibility.
+  h.holds[0].push(eof);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.views.length, 1);
+  view.setVisible(true);
+  const hold = await replacementHold.promise;
+  assert.equal(h.views.length, 1);
+  view.setVisible(false);
+  hold.push({ type: 'retained' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.views.length, 1);
+  view.setVisible(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.views.length, 2);
+  assert.equal(h.creates.length, 1);
+  assert.equal(old.commands.length, 1);
+  assert.deepEqual(h.views[1].commands, []);
+  view.input('new', true);
+  assert.deepEqual(
+    h.views[1].commands.map((x) => [x.sequence, x.data]),
+    [[1, 'new']],
+  );
+  view.detach();
+  await view.done;
+  assert.equal(view.reconnect(), true);
+  assert.equal(h.views.length, 2);
+});
+
+test('first hold loss is supervised after the ID is known, but permission failure is not retried', {
+  timeout: 5000,
+}, async (t) => {
+  for (const carrier of [false, true]) {
+    const h = host();
+    const retain = h.remote.retain;
+    let calls = 0;
+    h.remote.retain = (...args) => {
+      calls++;
+      if (calls === 1)
+        throw carrier ? new TestCarrier('retain lost') : Error('retain denied');
+      return retain(...args);
+    };
+    const { mgr, item } = fresh(t, h);
+    const p = panel();
+    const view = item.mount(mgr.issue(sid), limits, p);
+    if (carrier) {
+      await p.wait('connected');
+      assert.equal(calls, 2);
+    } else {
+      await view.done;
+      assert.deepEqual(p.seen.at(-1), ['disconnected', 'retain denied']);
+      assert.equal(calls, 1);
+      assert.equal(h.views.length, 0);
+      assert.equal(view.reconnect(), true);
+      await p.wait('connected');
+    }
+    assert.equal(h.views.length, 1);
+    assert.equal(h.creates.length, 1);
+  }
+});
+
+test('detach cancels a pending hold wait immediately without releasing the window hold', {
+  timeout: 5000,
+}, async (t) => {
+  const h = host();
+  const entered = deferred();
+  h.remote.retain = (_s, _id, signal) => {
+    const hold = stream(signal);
+    entered.resolve(hold);
+    return hold;
+  };
+  const { mgr, item } = fresh(t, h);
+  const view = item.mount(mgr.issue(sid), limits, panel());
+  const hold = await entered.promise;
+  view.detach();
+  await view.done;
+  assert.equal(hold.signal.aborted, false);
+  hold.push({ type: 'retained' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.views.length, 0);
+  assert.equal(h.creates.length, 1);
+});
+
+test('a readonly carrier loss requires explicit takeover, not automatic reconnect', {
+  timeout: 5000,
+}, async (t) => {
+  const { mgr, item, h } = fresh(t);
+  const p = panel();
+  const view = item.mount(mgr.issue(sid), limits, p);
+  await p.wait('connected');
+  const info = h.infos.get(h.creates[0]);
+  h.views[0].push({ type: 'state', info, writable: false });
+  await p.wait('readonly');
+  h.views[0].push(new TestCarrier('socket lost'));
+  await view.done;
+  assert.deepEqual(p.seen.at(-1), ['readonly', 'socket lost']);
+  assert.equal(h.views.length, 1);
+  view.input('discard', true);
+  assert.equal(view.reconnect(), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(p.seen.at(-1)[0], 'connected');
+  assert.equal(h.views.length, 2);
+  assert.equal(h.creates.length, 1);
+  assert.deepEqual(h.views[1].commands, []);
+});
+
+test('exit/failure permit final output without reconnect or fresh allocation', {
+  timeout: 5000,
+}, async (t) => {
+  for (const state of ['exited', 'failed']) {
+    const { mgr, item, h } = fresh(t);
+    const p = panel();
+    const view = item.mount(mgr.issue(sid), limits, p);
+    await p.wait('connected');
+    const info = { ...h.infos.get(h.creates[0]), state };
+    h.views[0].push({ type: 'state', info, writable: false });
+    await p.wait(state);
+    assert.equal(view.reconnect(), true);
+    h.views[0].push({ type: 'output', sequence: 11, data: 'last' });
+    h.views[0].push(state === 'exited' ? eof : new TestCarrier('socket lost'));
+    await view.done;
+    assert.ok(
+      p.events.some(([event, data]) => event === 'write' && data === 'last'),
+    );
+    assert.equal(p.seen.at(-1)[0], state);
+    assert.equal(view.reconnect(), true);
+    assert.equal(h.views.length, 1);
+    assert.equal(h.creates.length, 1);
+  }
+});
+
+test('protocol, transport-envelope, remote errors and clean EOF do not retry automatically', {
+  timeout: 5000,
+}, async (t) => {
+  for (const [failure, status] of [
+    [{ type: 'unknown' }, 'disconnected'],
+    [
+      new TestCarrier('api gateway: invalid Remote stream frame'),
+      'disconnected',
+    ],
+    [
+      Object.assign(Error('forbidden'), { code: 'remote-access/denied' }),
+      'disconnected',
+    ],
+    [
+      Object.assign(Error('no terminal'), { code: 'terminal/unavailable' }),
+      'missing',
+    ],
+    [eof, 'disconnected'],
+  ]) {
+    const { mgr, item, h } = fresh(t);
+    const p = panel();
+    const view = item.mount(mgr.issue(sid), limits, p);
+    await p.wait('connected');
+    h.views[0].push(failure);
+    await view.done;
+    assert.equal(p.seen.at(-1)[0], status);
+    assert.equal(h.views.length, 1);
+    assert.equal(view.reconnect(), true);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.views.length, status === 'missing' ? 1 : 2);
+    assert.equal(h.creates.length, 1);
+  }
+});
+
 test('an untrusted opening snapshot never renders or enables protocol/user input', async () => {
   const p = panel();
   const ac = new AbortController();
@@ -378,9 +610,13 @@ test('missing persistent storage disables allocation without falling back to ano
     control: 'user',
     state: 'running',
   });
-  const mgr = new RioSessions(h.remote, () => {
-    throw Error('storage disabled');
-  });
+  const mgr = new RioSessions(
+    h.remote,
+    () => {
+      throw Error('storage disabled');
+    },
+    managed,
+  );
   t.after(() => mgr.dispose());
   const p = panel();
   const view = mgr.get('s', 'c').mount(mgr.issue('s'), limits, p);

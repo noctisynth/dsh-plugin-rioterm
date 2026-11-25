@@ -26,13 +26,11 @@ export function TerminalPage({
   t,
 }: TerminalPageProps): React.ReactElement {
   const [requested, setRequested] = React.useState<string>();
-  const [attempt, setAttempt] = React.useState(0);
-  const { containerRef, state } = useTerminalMount({
+  const { containerRef, state, retry } = useTerminalMount({
     appearance,
     session,
     visible,
     ticket: requested ?? launchTicket,
-    attempt,
     inputLabel: t('input'),
     linkPrompt: t('openLink'),
   });
@@ -47,7 +45,11 @@ export function TerminalPage({
       {/* ResizeObserver measures only this stable box, never the notice. */}
       <div
         ref={containerRef}
-        aria-busy={state.status === 'loading' || state.status === 'opening'}
+        aria-busy={
+          state.status === 'loading' ||
+          state.status === 'opening' ||
+          state.status === 'reconnecting'
+        }
         data-rio-viewport
         className="rio:absolute rio:inset-0 rio:z-0 rio:overflow-hidden"
       />
@@ -59,7 +61,7 @@ export function TerminalPage({
         state={state}
         t={t}
         onStart={() => setRequested(issueLaunch())}
-        onRetry={() => setAttempt((n) => n + 1)}
+        onRetry={retry}
         onOpenNew={openNew}
       />
     </section>

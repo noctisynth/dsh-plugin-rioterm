@@ -7,7 +7,7 @@ import {
   closingBindings,
 } from './bindings.ts';
 import { RioSession } from './instance.ts';
-import type { TerminalRemote } from './remote.ts';
+import type { RemoteStreamFactory, TerminalRemote } from './remote.ts';
 
 // A registry belongs to a single client window; no shared DSH binding or tab inventory is mutated.
 export class RioSessions {
@@ -16,7 +16,14 @@ export class RioSessions {
   readonly #remote: TerminalRemote;
   readonly #storage: () => BindingStorage;
 
-  constructor(remote: TerminalRemote, storage: () => BindingStorage) {
+  readonly #stream: RemoteStreamFactory;
+
+  constructor(
+    remote: TerminalRemote,
+    storage: () => BindingStorage,
+    stream: RemoteStreamFactory,
+  ) {
+    this.#stream = stream;
     this.#remote = remote;
     this.#storage = storage;
   }
@@ -44,6 +51,7 @@ export class RioSessions {
         typeof ticket === 'string' && this.#tickets.get(ticket) === session;
       item = new RioSession(
         this.#remote,
+        this.#stream,
         session,
         bindingFor(this.#storage, session, content),
         {

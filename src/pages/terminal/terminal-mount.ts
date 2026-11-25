@@ -18,7 +18,7 @@ interface ViewOptions {
   session: TerminalSession;
   ticket: string | undefined;
   isVisible: () => boolean;
-  loadEngine: () => Promise<void>;
+  loadEngine: (reload: boolean) => Promise<void>;
   createScreen: (
     limits: TerminalLimits,
     input: Pick<TerminalAttachment, 'input' | 'resize'>,
@@ -27,20 +27,55 @@ interface ViewOptions {
 }
 
 export interface TerminalViewMount {
+  retry(focusInput?: boolean): void;
   setPreferences(preferences: EffectiveRioPreferences): void;
   setVisible(visible: boolean): void;
   dispose(): void;
 }
 
-/** Own one attempt, from engine preflight through detaching its screen. */
-export function mountTerminalView({
-  session,
-  ticket,
-  isVisible,
-  loadEngine,
-  createScreen,
-  onState,
-}: ViewOptions): TerminalViewMount | undefined {
+export function mountTerminalView(options: ViewOptions): TerminalViewMount {
+  let status: TerminalViewState['status'] | undefined;
+  const start = (reload: boolean) =>
+    startAttempt(options, reload, (state) => {
+      status = state.status;
+      options.onState(state);
+    });
+  let attempt = start(false);
+  return {
+    retry(focusInput = false) {
+      // An old button event must not reopen an exited shell or take control from a hidden tab.
+      if (!options.isVisible()) return;
+      if (
+        status !== 'readonly' &&
+        status !== 'disconnected' &&
+        status !== 'resourceFailed'
+      )
+        return;
+      if (attempt?.reconnect(focusInput)) return;
+      // Only preflight/no-identity failures start over, with the ORIGINAL ticket (if any).
+      attempt?.dispose();
+      attempt = start(true);
+    },
+    setPreferences: (preferences) => attempt?.setPreferences(preferences),
+    setVisible: (visible) => attempt?.setVisible(visible),
+    dispose() {
+      attempt?.dispose();
+      attempt = undefined;
+      status = undefined;
+    },
+  };
+}
+
+/** One preflight and screen. Dispose fences *all* callbacks before another attempt can start. */
+function startAttempt(
+  { session, ticket, isVisible, loadEngine, createScreen }: ViewOptions,
+  reload: boolean,
+  onState: ViewOptions['onState'],
+):
+  | (Omit<TerminalViewMount, 'retry'> & {
+      reconnect(focusInput: boolean): boolean;
+    })
+  | undefined {
   try {
     if (session.needsLaunch(ticket)) {
       onState({ status: 'idle' });
@@ -56,7 +91,7 @@ export function mountTerminalView({
   let screen: RioScreen | undefined;
   let attachment: TerminalAttachment | undefined;
   onState({ status: 'loading' });
-  void loadEngine()
+  void loadEngine(reload)
     .then(async () => {
       if (!mounted) return;
       let limits: TerminalLimits;
@@ -78,7 +113,9 @@ export function mountTerminalView({
         visible: isVisible(),
         screen,
         status(status, detail) {
-          if (mounted) onState(detail ? { status, detail } : { status });
+          if (!mounted) return;
+          if (status === 'reconnecting') screen?.cancelAutoFocus();
+          onState(detail ? { status, detail } : { status });
         },
       });
     })
@@ -92,6 +129,12 @@ export function mountTerminalView({
     });
 
   return {
+    reconnect(focusInput) {
+      if (!attachment?.reconnect()) return false;
+      // Transfer focus during the click, never when a late snapshot arrives.
+      if (focusInput) screen?.focus();
+      return true;
+    },
     setPreferences(preferences) {
       screen?.setPreferences(preferences);
     },

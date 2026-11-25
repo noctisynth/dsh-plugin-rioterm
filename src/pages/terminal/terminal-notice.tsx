@@ -12,26 +12,35 @@ interface TerminalNoticeProps {
   state: TerminalViewState;
   t: TerminalTranslate;
   onStart: () => void;
-  onRetry: () => void;
+  onRetry: (focusInput: boolean) => void;
   onOpenNew: () => void;
 }
 
 function noticeAction({
-  state: { status },
+  state: { status, detail },
   t,
   onStart,
   onRetry,
   onOpenNew,
 }: TerminalNoticeProps) {
+  const reconnect = ({
+    currentTarget: button,
+  }: React.MouseEvent<HTMLButtonElement>) => {
+    const doc = button.ownerDocument;
+    onRetry(doc.activeElement === button && !doc.hidden && doc.hasFocus());
+  };
   switch (status) {
     case 'idle':
       return { label: t('start'), onClick: onStart };
     case 'readonly':
-      return { label: t('control'), onClick: onRetry };
+      return {
+        label: t(detail ? 'reconnectControl' : 'control'),
+        onClick: reconnect,
+      };
     case 'resourceFailed':
-      return { label: t('retry'), onClick: onRetry };
+      return { label: t('retry'), onClick: () => onRetry(false) };
     case 'disconnected':
-      return { label: t('reconnect'), onClick: onRetry };
+      return { label: t('reconnect'), onClick: reconnect };
     case 'exited':
     case 'missing':
     case 'failed':
@@ -63,7 +72,9 @@ export function TerminalNotice(
     >
       <div className="rio:flex rio:flex-wrap rio:items-center rio:gap-x-3 rio:gap-y-1.5">
         {/* Announce the status, not the controls or the diagnostic disclosure. */}
-        <AlertTitle role={failed ? 'alert' : 'status'}>{t(status)}</AlertTitle>
+        <AlertTitle role={failed ? 'alert' : 'status'}>
+          {t(status === 'readonly' && detail ? 'readonlyDisconnected' : status)}
+        </AlertTitle>
         {action && (
           <Button
             variant={status === 'idle' ? 'default' : 'outline'}

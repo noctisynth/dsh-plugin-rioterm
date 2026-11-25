@@ -3,15 +3,20 @@ import type {
   TerminalLimits,
   TerminalPanel,
   TerminalSession,
-  TerminalStatus,
 } from '../terminal/contracts.ts';
-import { errorMessage } from '../terminal/error-message.ts';
+import {
+  MissingBinding,
+  type ResolvedTerminal,
+  SessionAttachment,
+} from './attachment.ts';
 import type { TabBinding } from './bindings.ts';
 import { SessionHold } from './hold.ts';
-import { owned, type TerminalRemote, value } from './remote.ts';
-import { TerminalWire } from './wire.ts';
-
-class MissingBinding extends Error {}
+import {
+  owned,
+  type RemoteStreamFactory,
+  type TerminalRemote,
+  value,
+} from './remote.ts';
 
 interface LaunchTickets {
   permits(ticket: unknown): boolean;
@@ -22,23 +27,26 @@ interface LaunchTickets {
 // contract does not expose the Remote, binding, or window's ticket inventory.
 export class RioSession {
   readonly #remote: TerminalRemote;
+  readonly #stream: RemoteStreamFactory;
   readonly #session: string;
   readonly #binding: TabBinding;
   readonly #tickets: LaunchTickets;
   readonly #hold: SessionHold;
   readonly #lifetime = new AbortController();
   #active: AbortController | undefined;
-  #opening: Promise<string> | undefined;
+  #opening: Promise<ResolvedTerminal> | undefined;
   #closing: Promise<void> | undefined;
   #closed = false;
 
   constructor(
     remote: TerminalRemote,
+    stream: RemoteStreamFactory,
     session: string,
     binding: TabBinding,
     tickets: LaunchTickets,
   ) {
     this.#remote = remote;
+    this.#stream = stream;
     this.#session = session;
     this.#binding = binding;
     this.#tickets = tickets;
@@ -108,8 +116,11 @@ export class RioSession {
     this.#assertOpen();
     // A tab may have collapsed while create was in flight. Keep its process
     // even when the original screen occurrence is no longer mounted.
-    if (this.#hold.isWanted) await this.#hold.ensure(id);
-    return id;
+    const initialHold = this.#hold.isWanted ? this.#hold.ensure(id) : undefined;
+    // Detached occurrences may never await this. A mounted generation observes
+    // the original promise (including its carrier/business failure) before attach.
+    void initialHold?.catch(() => {});
+    return { id, initialHold };
   }
 
   retain(wanted: boolean) {
@@ -123,80 +134,17 @@ export class RioSession {
   ): TerminalAttachment {
     // No operation on a superseded physical attachment may use its successor's handle or sink.
     this.#active?.abort();
-    const ac = new AbortController();
-    let visible = panel.visible ?? true;
-    let wake: (() => void) | undefined;
-    let wire: TerminalWire | undefined;
-    const current = () =>
-      this.#active === ac && !ac.signal.aborted && !this.#closed;
-    const send = (op: () => void) => {
-      if (!current()) return;
-      try {
-        op();
-      } catch (error) {
-        panel.status('disconnected', errorMessage(error));
-        ac.abort();
-      }
-    };
-    this.#active = ac;
-    panel.screen.setWritable(false);
-    panel.status('opening');
-    ac.signal.addEventListener(
-      'abort',
-      () => {
-        wake?.();
-        wire?.stop();
-        wire = undefined;
-      },
-      { once: true },
-    );
-    const done = (async () => {
-      try {
-        const id = await this.#open(ticket, limits);
-        if (!current()) return;
-        await this.#hold.ensure(id);
-        // A pane can collapse while opening. Hold the shell, but don't take
-        // input/resize control away from a visible window in the meantime.
-        while (current() && !visible) {
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          wake = undefined;
-        }
-        if (!current()) return;
-        const stream = this.#remote.attach(this.#session, id, ac.signal);
-        let ended = false;
-        const notify = (status: TerminalStatus) => {
-          ended = status === 'exited' || status === 'failed';
-          if (current()) panel.status(status);
-        };
-        wire = new TerminalWire(id, stream, limits, panel.screen, notify);
-        await wire.consume(ac.signal);
-        if (current() && !ended) panel.status('disconnected');
-      } catch (error) {
-        if (current())
-          panel.status(
-            error instanceof MissingBinding ? 'missing' : 'disconnected',
-            errorMessage(error),
-          );
-      } finally {
-        ac.abort();
-        if (this.#active === ac) this.#active = undefined;
-      }
-    })();
-    return {
-      input: (data, typed) => send(() => wire?.write(data, typed)),
-      resize: (cols, rows) => send(() => wire?.resize(cols, rows)),
-      setVisible(next: boolean) {
-        visible = next;
-        if (visible) wake?.();
-      },
-      detach: () => {
-        ac.abort();
-        if (this.#active === ac) this.#active = undefined;
-      },
-      done,
-    };
+    const lifetime = new AbortController();
+    this.#active = lifetime;
+    return new SessionAttachment({
+      lifetime,
+      limits,
+      panel,
+      hold: this.#hold,
+      stream: this.#stream,
+      open: () => this.#open(ticket, limits),
+      attach: (id, signal) => this.#remote.attach(this.#session, id, signal),
+    });
   }
 
   async close() {

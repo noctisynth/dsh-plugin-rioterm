@@ -19,7 +19,11 @@ export const inject = [
 
 /** DSH client entry: one session registry per window; no page or PTY is mounted here. */
 export function apply(ctx: ClientContext): void {
-  const sessions = new RioSessions(ctx.remote.terminal, () => localStorage);
+  const sessions = new RioSessions(
+    ctx.remote.terminal,
+    () => localStorage,
+    (options) => ctx.remote.$stream(options),
+  );
   ctx.effect(
     () => () => sessions.dispose(),
     'dsh-plugin-rioterm: release attachments',

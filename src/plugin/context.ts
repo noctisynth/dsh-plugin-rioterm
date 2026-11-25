@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import type { TerminalTranslate } from '../pages/terminal/messages.ts';
-import type { TerminalRemote } from '../session/remote.ts';
+import type { RemoteStreamFactory, TerminalRemote } from '../session/remote.ts';
 import type { PreferenceConfigForms } from './preferences.ts';
 
 // Structural types for the DSH client services this bundle consumes. Never
@@ -19,7 +19,7 @@ export interface SidebarTab {
 }
 export interface ClientContext {
   effect(register: () => Dispose, label: string): void;
-  remote: { terminal: TerminalRemote };
+  remote: { terminal: TerminalRemote; $stream: RemoteStreamFactory };
   theme: {
     getTheme(): {
       revision: number;

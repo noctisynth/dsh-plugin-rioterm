@@ -67,10 +67,16 @@ export class SessionHold {
     }
   }
 
+  isCurrent(ready: Promise<void>) {
+    return this.stream?.ready === ready;
+  }
+
   // Only an acknowledged hold permits a physical attachment. All callers of
   // ensure share the same readiness promise and the same retain stream.
   ensure(id: string) {
     if (this.stream) return this.stream.ready;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
     const ac = new AbortController();
     let resolve!: () => void;
     let reject!: (error: unknown) => void;

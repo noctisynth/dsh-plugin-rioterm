@@ -5,7 +5,7 @@ import { mountTerminalView } from '../src/pages/terminal/terminal-mount.ts';
 import { ResourceError } from '../src/rio/wasm-loader.ts';
 
 // Exercise the same page lifecycle with deferred ports, not a mock React renderer or a real PTY.
-function fixture() {
+function fixture({ knownIdentity = true } = {}) {
   const events = [];
   const engine = Promise.withResolvers();
   const environment = Promise.withResolvers();
@@ -31,6 +31,11 @@ function fixture() {
         panel = target;
         events.push(['mount', ticket, limits, target.visible]);
         return {
+          reconnect() {
+            events.push('reconnect');
+            if (knownIdentity) target.status('reconnecting');
+            return knownIdentity;
+          },
           input: (...args) => events.push(['input', ...args]),
           resize: (...args) => events.push(['resize', ...args]),
           setVisible: (value) => events.push(['attachment visible', value]),
@@ -42,6 +47,8 @@ function fixture() {
       bindings = input;
       events.push(['screen', limits]);
       return {
+        focus: () => events.push('focus'),
+        cancelAutoFocus: () => events.push('cancel autofocus'),
         setVisible: (value) => events.push(['screen visible', value]),
         setPreferences: (value) => events.push(['render preferences', value]),
         dispose: () => events.push('dispose'),
@@ -69,7 +76,9 @@ const loading = ['state', { status: 'loading' }];
 test('an idle page does not download WASM, discover a shell or consume a launch ticket', () => {
   const f = fixture();
   f.options.session.needsLaunch = () => true;
-  assert.equal(mountTerminalView(f.options), undefined);
+  const view = mountTerminalView(f.options);
+  view.retry();
+  view.dispose();
   assert.deepEqual(f.events, [['state', { status: 'idle' }]]);
 });
 
@@ -143,6 +152,114 @@ test('one mount forwards visibility and input only to its attachment and release
   ]);
 });
 
+test('manual reconnect and takeover reuse the mounted screen and environment', async () => {
+  const f = fixture();
+  const view = mountTerminalView(f.options);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  const original = f.panel;
+  for (const status of ['disconnected', 'readonly']) {
+    original.status(status);
+    f.events.length = 0;
+    view.retry(true);
+    view.retry(true); // stale click after recovery started
+    await setImmediate();
+    original.status('connected');
+    f.input.input('x', true);
+    assert.equal(f.panel, original);
+    assert.deepEqual(f.events, [
+      'reconnect',
+      'cancel autofocus',
+      ['state', { status: 'reconnecting' }],
+      'focus', // Immediately, never upon later connection.
+      ['state', { status: 'connected' }],
+      ['input', 'x', true],
+    ]);
+  }
+  f.events.length = 0;
+  original.status('reconnecting'); // Automatic recovery, even before the first auto-focus.
+  original.status('connected');
+  assert.deepEqual(f.events, [
+    'cancel autofocus',
+    ['state', { status: 'reconnecting' }],
+    ['state', { status: 'connected' }],
+  ]);
+  for (const status of ['missing', 'exited', 'failed']) {
+    original.status(status);
+    f.events.length = 0;
+    view.retry();
+    assert.deepEqual(f.events, []);
+  }
+  original.status('readonly');
+  f.hide();
+  view.setVisible(false);
+  f.events.length = 0;
+  view.retry(true);
+  assert.deepEqual(f.events, []);
+  view.dispose();
+});
+
+test('retry without a known identity fences the old screen and repeats only the original preflight', async () => {
+  const f = fixture({ knownIdentity: false });
+  const limits = {};
+  const view = mountTerminalView(f.options);
+  f.engine.resolve();
+  f.environment.resolve(limits);
+  await setImmediate();
+  const oldPanel = f.panel;
+  const oldInput = f.input;
+  oldPanel.status('disconnected');
+  f.events.length = 0;
+  view.retry(true);
+  await setImmediate();
+  oldPanel.status('connected');
+  oldInput.input('stale', true);
+  assert.notEqual(f.panel, oldPanel);
+  assert.deepEqual(f.events, [
+    'reconnect',
+    'detach',
+    ['screen visible', false],
+    'dispose',
+    'aborted',
+    loading,
+    'load',
+    'environment',
+    ['screen', limits],
+    ['screen visible', true],
+    ['mount', 'launch-once', limits, true],
+  ]);
+  view.dispose();
+});
+
+test('resource retry reloads the engine and can finish the original launch', async () => {
+  const f = fixture();
+  f.options.loadEngine = async (reload) => {
+    f.events.push(['load', reload]);
+    if (!reload) throw new ResourceError('fetch');
+  };
+  const limits = {};
+  f.environment.resolve(limits);
+  const view = mountTerminalView(f.options);
+  await setImmediate();
+  assert.deepEqual(f.events.splice(0), [
+    loading,
+    ['load', false],
+    ['state', { status: 'resourceFailed', detail: 'fetch' }],
+  ]);
+  view.retry();
+  await setImmediate();
+  assert.deepEqual(f.events, [
+    loading,
+    ['load', true],
+    'environment',
+    ['screen', limits],
+    ['screen visible', true],
+    ['mount', 'launch-once', limits, true],
+  ]);
+  view.dispose();
+});
+
 test('engine resource, instantiation and host errors keep their distinct recovery states', async () => {
   for (const [phase, error, status] of [
     ['engine', new ResourceError('resource'), 'resourceFailed'],
@@ -162,6 +279,12 @@ test('engine resource, instantiation and host errors keep their distinct recover
       { status, detail: error.message },
     ]);
     assert.equal(f.panel, undefined);
+    if (status === 'wasmFailed') {
+      f.events.length = 0;
+      view.retry();
+      await setImmediate();
+      assert.deepEqual(f.events, []);
+    }
     view.dispose();
   }
 });

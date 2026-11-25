@@ -148,13 +148,42 @@ test('page keeps an independent full-size viewport even when status is visible',
   }
 });
 
+test('takeover transfers focus only from the active button in a foreground document', () => {
+  const focus = [];
+  const tree = TestRenderer.create(
+    React.createElement(TerminalNotice, {
+      state: { status: 'readonly' },
+      t: key,
+      onRetry: (value) => focus.push(value),
+    }),
+  );
+  try {
+    const button = tree.root.findByType('button');
+    assert.deepEqual(button.children, ['control']); // A connected reader needn't reconnect.
+    const doc = { hidden: false, hasFocus: () => true };
+    const event = { currentTarget: { ownerDocument: doc } };
+    button.props.onClick(event); // Focus elsewhere
+    doc.activeElement = event.currentTarget;
+    button.props.onClick(event);
+    doc.hidden = true;
+    button.props.onClick(event);
+    doc.hidden = false;
+    doc.hasFocus = () => false;
+    button.props.onClick(event);
+    assert.deepEqual(focus, [false, true, false, false]);
+  } finally {
+    tree.unmount();
+  }
+});
+
 test('all notice states expose just their intended action, native disclosure and one live message', () => {
   const cases = [
     ['connected'],
     ['loading'],
     ['opening'],
+    ['reconnecting'],
     ['idle', 'start', 'start'],
-    ['readonly', 'control', 'retry'],
+    ['readonly', 'reconnectControl', 'retry'],
     ['resourceFailed', 'retry', 'retry'],
     ['disconnected', 'reconnect', 'retry'],
     ['exited', 'new', 'new'],
@@ -188,7 +217,9 @@ test('all notice states expose just their intended action, native disclosure and
         (n) => n.props.role === 'alert' || n.props.role === 'status',
       );
       assert.equal(live.length, 1);
-      assert.deepEqual(live[0].children, [status]);
+      assert.deepEqual(live[0].children, [
+        status === 'readonly' ? 'readonlyDisconnected' : status,
+      ]);
       assert.equal(live[0].findAllByType('button').length, 0);
       const details = tree.root.findByType('details');
       assert.equal(details.props.open, undefined);
@@ -198,7 +229,9 @@ test('all notice states expose just their intended action, native disclosure and
       assert.deepEqual(actions, []);
       if (label) {
         assert.deepEqual(buttons[0].children, [label]);
-        buttons[0].props.onClick();
+        buttons[0].props.onClick({
+          currentTarget: { ownerDocument: { activeElement: null } },
+        });
         assert.deepEqual(actions, [operation]);
       }
     } finally {

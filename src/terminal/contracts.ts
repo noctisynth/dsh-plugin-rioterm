@@ -17,6 +17,7 @@ export interface TerminalLimits {
 
 export type TerminalStatus =
   | 'opening'
+  | 'reconnecting'
   | 'connected'
   | 'readonly'
   | 'exited'
@@ -31,6 +32,8 @@ export interface TerminalPanel {
 }
 
 export interface TerminalAttachment {
+  /** Retry this attachment in place; false means no known process to reattach. */
+  reconnect(): boolean;
   input(data: string, typed: boolean): void;
   resize(cols: number, rows: number): void;
   setVisible(visible: boolean): void;

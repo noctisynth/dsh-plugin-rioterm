@@ -15,7 +15,6 @@ interface MountOptions {
   session: TerminalSession;
   visible: boolean;
   ticket: string | undefined;
-  attempt: number;
   inputLabel: string;
   linkPrompt: string;
 }
@@ -25,7 +24,6 @@ export function useTerminalMount({
   session,
   visible,
   ticket,
-  attempt,
   inputLabel,
   linkPrompt,
 }: MountOptions) {
@@ -60,7 +58,7 @@ export function useTerminalMount({
       session,
       ticket,
       isVisible: () => visibleRef.current,
-      loadEngine: () => loadWasm(attempt > 0),
+      loadEngine: loadWasm,
       createScreen: (limits, input) =>
         createRioScreen(container, {
           preferences: appearanceRef.current.getSnapshot(),
@@ -74,13 +72,16 @@ export function useTerminalMount({
         }),
       onState: setState,
     });
-    if (!mount) return;
     active.current = mount;
     return () => {
       mount.dispose();
       if (active.current === mount) active.current = undefined;
     };
-  }, [started, attempt, session, ticket]);
+  }, [started, session, ticket]);
 
-  return { containerRef, state };
+  return {
+    containerRef,
+    state,
+    retry: (focusInput: boolean) => active.current?.retry(focusInput),
+  };
 }

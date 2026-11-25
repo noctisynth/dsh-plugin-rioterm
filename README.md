@@ -8,6 +8,8 @@
 2. 在 macOS/Linux 输入 `echo $$`，记下 shell PID。切换标签再切回，或刷新 DSH 页面，再执行一次；同一 Host 进程中应回到原来的 shell。关闭终端标签会请求结束 shell，不等同于收起侧栏。Host 重启或进程已丢失时不会静默新建。
 3. 输入 `stty size`，调整面板宽度后重试，列数应随之改变。拉高面板时，原有的滚动历史（包括空行）可能重新出现在顶部；插件不会为固定提示符的位置而删除历史。可用 `vim -Nu NONE -i NONE -n`（输入 `:q!` 退出）验证全屏程序。支持键盘、粘贴、文本选择和滚轮；当前不向 Vim 等应用转发鼠标点击或拖动。
 
+**使用中断线：**原画面会保留，但不能输入。DSH 的传输连接恢复后，原本可写且当前可见的 Rio 标签会尝试连接原来的 shell，用宿主快照恢复画面。隐藏标签等到再次显示才接屏幕；已经只读的窗口必须手动取得输入控制权。也可以点「重新连接」：已知终端身份时直接在原面板重连，不重新启动 shell，也不重发断线前未确认的输入。如果原进程已不存在，需要手动新建。
+
 ## Rio 设置
 
 在 DSH 侧栏打开 **插件 → 已安装插件 → Rio 终端**，在插件详情的配置区修改并保存。它只影响 Rio 标签，不改变 DSH 的内置终端。取消编辑不会写入配置；恢复默认后也需要保存。
@@ -51,10 +53,10 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" scripts/test-dsh-pty.mjs
 该测试使用独立的 DSH 控制器与测试 shell，不连接正在运行的用户终端。若系统不允许分配 PTY，可单独验证桌面控制器与 Rio 是否兼容：
 
 ```sh
-ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test tests/dsh-desktop-loopback.test.mjs tests/host-preferences-desktop.test.mjs
+ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test tests/dsh-desktop-loopback.test.mjs tests/desktop-reconnect.test.mjs tests/host-preferences-desktop.test.mjs
 ```
 
-回环测试不启动子进程：使用真实的 DSH 控制器和屏幕序列化器、插件的输入协议和 Rio WASM，检查中文输入、尺寸、全屏模式重连以及还原主屏幕。桌面设置测试使用真实的 Cordis Loader 与 DSH 配置服务，验证保存和清除覆盖不会重新挂载插件；配置写入在内存中，不触及个人配置。常规 `pnpm test` 在普通 Node 中会跳过这两项桌面专测。它们不替代 GUI 里的人工验收。
+回环测试不启动子进程：使用真实的 DSH 控制器和屏幕序列化器、插件的输入协议和 Rio WASM，检查中文输入、尺寸、全屏模式重连以及还原主屏幕。重连测试使用桌面自带的 Gateway，模拟传输断开、恢复与手动接管，检查没有重建 shell 或重复发送输入。桌面设置测试使用真实的 Cordis Loader 与 DSH 配置服务，验证保存和清除覆盖不会重新挂载插件；配置写入在内存中，不触及个人配置。常规 `pnpm test` 在普通 Node 中会跳过这三项桌面专测。它们不替代 GUI 里的人工验收。
 
 ## 变更集与发布
 

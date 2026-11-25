@@ -17,7 +17,10 @@ type Result<T> =
   | { ok: false; error: { message: string; code?: string } };
 
 export function value<T>(result: Result<T>): T {
-  if (!result.ok) throw new Error(result.error.message);
+  if (!result.ok) {
+    if (result.error instanceof Error) throw result.error;
+    throw Object.assign(new Error(result.error.message), result.error);
+  }
   return result.value;
 }
 
@@ -25,7 +28,28 @@ export interface InputWindow {
   maxBytes: number;
   frameOverheadBytes: number;
 }
-type RemoteFrame =
+// Structural port for the installed Gateway's $stream. Only Gateway knows its
+// carrier error class and Connection retry policy; never import its browser bundle.
+export interface RemoteStreamOptions<Item> {
+  name: string;
+  open(signal: AbortSignal): AsyncIterable<Item>;
+  ended(accepted: boolean): Error;
+  carrierFailed(error: Error): void;
+}
+export interface ManagedRemoteStream<Item>
+  extends AsyncIterable<{
+    readonly generation: number;
+    readonly value: Item;
+    readonly signal: AbortSignal;
+    accept(): void;
+  }> {
+  dispose(): Promise<void>;
+}
+export type RemoteStreamFactory = <Item>(
+  options: RemoteStreamOptions<Item>,
+) => ManagedRemoteStream<Item>;
+
+export type RemoteFrame =
   | {
       type: 'snapshot';
       info: TerminalInfo;

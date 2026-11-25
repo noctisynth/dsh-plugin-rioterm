@@ -10,6 +10,8 @@ import { RioTerminal, type RioTerminalOptions } from './terminal.ts';
 import { RioViewport } from './viewport.ts';
 
 export interface RioScreen extends TerminalFrameSink {
+  focus(): void;
+  cancelAutoFocus(): void;
   setVisible(visible: boolean): void;
   setPreferences(preferences: EffectiveRioPreferences): void;
   dispose(): void;
@@ -109,6 +111,8 @@ export function createRioScreen(
   watchPixelRatio();
   let detectUrls = preferences.detectUrls;
   return {
+    focus: keyboard.focus,
+    cancelAutoFocus: keyboard.cancelAutoFocus,
     snapshot(cols, rows, data) {
       if (signal.aborted) return;
       keyboard.reset();

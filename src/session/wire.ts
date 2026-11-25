@@ -7,6 +7,7 @@ import {
   type InputWindow,
   owned,
   type RemoteAttachment,
+  type RemoteFrame,
   type TerminalInfo,
   type WireCommand,
   type WireInput,
@@ -53,60 +54,89 @@ export class TerminalWire {
     try {
       for await (const frame of this.handle) {
         if (signal.aborted || this.ended) return;
-        if (this.output < 0 && frame.type !== 'snapshot')
-          throw new Error('Missing opening terminal snapshot.');
-        switch (frame.type) {
-          case 'snapshot':
-            if (
-              this.output >= 0 ||
-              !Number.isSafeInteger(frame.sequence) ||
-              frame.sequence < 0
-            )
-              throw new Error('Invalid terminal snapshot.');
-            owned(this.id, frame.info);
-            this.output = frame.sequence;
-            if (frame.inputWindow) this.window = frame.inputWindow;
-            this.hostSize = `${frame.info.cols}:${frame.info.rows}`;
-            this.screen.snapshot(
-              frame.info.cols,
-              frame.info.rows,
-              frame.screen,
-            );
-            this.update(frame.info, frame.writable);
-            break;
-          case 'state':
-            owned(this.id, frame.info);
-            this.update(frame.info, frame.writable);
-            break;
-          case 'output':
-            if (frame.sequence !== this.output + 1)
-              throw new Error('Terminal output sequence gap.');
-            this.output = frame.sequence;
-            this.screen.write(frame.data);
-            break;
-          case 'ack': {
-            const pay = this.pending.get(frame.sequence);
-            if (frame.sequence !== this.acknowledged + 1 || !pay)
-              throw new Error('Unexpected input acknowledgement.');
-            this.acknowledged = frame.sequence;
-            this.rawBytes -= pay.raw;
-            this.inFlight -= pay.cost;
-            this.buffered -= pay.cost;
-            this.pending.delete(frame.sequence);
-            if (frame.refusal) {
-              this.revoke();
-              this.notify(
-                frame.refusal === 'not-running' ? 'exited' : 'readonly',
-              );
-            }
-            this.flush();
-            break;
-          }
-        }
+        this.receive(frame);
       }
     } finally {
       this.stop();
     }
+  }
+  receive(frame: RemoteFrame) {
+    if (this.ended) return;
+    if (!frame || (this.output < 0 && frame.type !== 'snapshot'))
+      throw new Error('Missing opening terminal snapshot.');
+    switch (frame.type) {
+      case 'snapshot':
+        if (
+          this.output >= 0 ||
+          !Number.isSafeInteger(frame.sequence) ||
+          frame.sequence < 0 ||
+          typeof frame.screen !== 'string' ||
+          (frame.inputWindow !== undefined &&
+            (!frame.inputWindow ||
+              !Number.isSafeInteger(frame.inputWindow.maxBytes) ||
+              frame.inputWindow.maxBytes <= 0 ||
+              !Number.isSafeInteger(frame.inputWindow.frameOverheadBytes) ||
+              frame.inputWindow.frameOverheadBytes < 0))
+        )
+          throw new Error('Invalid terminal snapshot.');
+        this.validateState(frame.info, frame.writable);
+        this.output = frame.sequence;
+        if (frame.inputWindow) this.window = frame.inputWindow;
+        this.hostSize = `${frame.info.cols}:${frame.info.rows}`;
+        this.screen.snapshot(frame.info.cols, frame.info.rows, frame.screen);
+        this.update(frame.info, frame.writable);
+        break;
+      case 'state':
+        this.validateState(frame.info, frame.writable);
+        this.update(frame.info, frame.writable);
+        break;
+      case 'output':
+        if (
+          !Number.isSafeInteger(frame.sequence) ||
+          frame.sequence !== this.output + 1 ||
+          typeof frame.data !== 'string'
+        )
+          throw new Error('Terminal output sequence gap.');
+        this.output = frame.sequence;
+        this.screen.write(frame.data);
+        break;
+      case 'ack': {
+        const pay = this.pending.get(frame.sequence);
+        if (
+          frame.sequence !== this.acknowledged + 1 ||
+          !pay ||
+          (frame.refusal !== undefined &&
+            frame.refusal !== 'not-running' &&
+            frame.refusal !== 'read-only')
+        )
+          throw new Error('Unexpected input acknowledgement.');
+        this.acknowledged = frame.sequence;
+        this.rawBytes -= pay.raw;
+        this.inFlight -= pay.cost;
+        this.buffered -= pay.cost;
+        this.pending.delete(frame.sequence);
+        if (frame.refusal) {
+          this.revoke();
+          this.notify(frame.refusal === 'not-running' ? 'exited' : 'readonly');
+        }
+        this.flush();
+        break;
+      }
+      default:
+        throw new Error('Unknown terminal frame.');
+    }
+  }
+  private validateState(info: TerminalInfo, writable: boolean) {
+    owned(this.id, info);
+    if (
+      typeof writable !== 'boolean' ||
+      !Number.isSafeInteger(info.cols) ||
+      info.cols < 1 ||
+      !Number.isSafeInteger(info.rows) ||
+      info.rows < 1 ||
+      !['running', 'exited', 'failed'].includes(info.state)
+    )
+      throw new Error('Invalid terminal state.');
   }
   private update(info: TerminalInfo, writable: boolean) {
     const size = `${info.cols}:${info.rows}`;
