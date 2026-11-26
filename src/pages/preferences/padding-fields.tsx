@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { cn } from '../../lib/cn.ts';
 import {
   paddingFields,
   paddingRange,
@@ -8,6 +9,7 @@ import {
   controlClass,
   type FieldForm,
   hintClass,
+  numericControlClass,
   PreferenceTextInput,
   SettingsRow,
 } from './fields.tsx';
@@ -34,10 +36,10 @@ export function PaddingFields({ form }: { form: FieldForm }) {
     >
       <fieldset
         aria-labelledby={id}
-        className="rio:m-0 rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,3.25rem),1fr))] rio:gap-1.5 rio:border-0 rio:p-0"
+        className="rio:m-0 rio:grid rio:w-full rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,3.25rem),1fr))] rio:gap-3 rio:border-0 rio:p-0"
       >
         {paddingFields.map((name) => (
-          <div key={name} className="rio:grid rio:min-w-0 rio:gap-0.5">
+          <div key={name} className="rio:grid rio:min-w-0 rio:gap-2">
             <label htmlFor={`${id}-${name}`} className={hintClass}>
               {t(sideLabels[name])}
             </label>
@@ -51,7 +53,7 @@ export function PaddingFields({ form }: { form: FieldForm }) {
               aria-label={t(name)}
               aria-describedby={hintId}
               aria-invalid={form.invalid.includes(name) || undefined}
-              className={controlClass}
+              className={cn(controlClass, numericControlClass)}
             />
           </div>
         ))}

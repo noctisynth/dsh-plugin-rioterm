@@ -3,7 +3,7 @@ const en = {
   description:
     'Changes are saved automatically and update open terminals unless noted below. Changing settings does not start a shell.',
   fontHelp:
-    'Leave the font family or size blank to inherit the profile setting, or the DSH font if the profile has no override.',
+    'Set the font family and size independently. Leave a field blank to use its default.',
   hostFont: 'Current DSH monospace font',
   fontPreview: 'Font preview',
   fontSample: 'Aa0 中 1l',
@@ -67,7 +67,7 @@ const en = {
   colors: 'Terminal colors',
   colorSummary: 'Text, background, cursor, selection and ANSI palette',
   colorHint:
-    'Color priority: your override, then the Rio preset in this DSH profile, then the field’s default. Enter #RGB, #RGBA, #RRGGBB or #RRGGBBAA. The picker keeps a known opacity; otherwise it starts opaque.',
+    'Enter #RGB, #RGBA, #RRGGBB or #RRGGBBAA. The picker keeps a known opacity; otherwise it starts opaque.',
   colorOverride: 'Your override',
   colorProfile: 'Rio preset in this DSH profile',
   colorSourceUnavailable: 'Inherited color source unavailable',
@@ -90,9 +90,8 @@ const en = {
   dsh: 'DSH built-in terminal',
   ansiHint:
     'Used for colors such as directory names in ls. Individual color overrides take priority.',
-  baseColors: 'Customize text, background, cursor and selection',
+  baseColors: 'Customize cursor and selection',
   textAndBackground: 'Text and background',
-  followsDsh: 'Follow DSH',
   previewColors: 'Palette preview',
   opacity: 'Opacity',
   palette: 'Customize the 16 ANSI colors',
@@ -119,9 +118,10 @@ const en = {
   brightWhite: 'Bright white',
   chooseColor: 'Choose color',
   clear: 'Clear',
+  defaultValue: 'Default',
   inherited: 'Inherited',
   ifCleared: 'If cleared',
-  useInherited: 'Use inherited value',
+  useInherited: 'Reset to default',
   on: 'On',
   off: 'Off',
   integerRange: 'Whole numbers',
@@ -149,9 +149,9 @@ const en = {
   reviewIssue: 'Review unsaved edits',
   restore: 'Restore defaults…',
   keepSettings: 'Keep settings',
-  confirmRestore: 'Clear all my overrides',
+  confirmRestore: 'Restore all defaults',
   confirmRestoreHint:
-    'Clear all your Rio overrides and use inherited settings? This takes effect immediately.',
+    'Restore all Rio settings to their defaults? This takes effect immediately.',
 };
 
 export type PreferenceTranslate = (key: keyof typeof en) => string;
@@ -160,7 +160,7 @@ const zh = {
   title: 'Rio 终端',
   description:
     '设置会自动保存。除特别注明的选项外，更改会同步到已打开的 Rio 终端，不会启动 shell。',
-  fontHelp: '字体家族和字号可分别留空：有配置值时继承配置，否则跟随 DSH。',
+  fontHelp: '字体和字号可分别设置，留空使用默认值。',
   hostFont: 'DSH 当前等宽字体',
   fontPreview: '字体预览',
   fontSample: 'Aa0 中 1l',
@@ -221,7 +221,7 @@ const zh = {
   colors: '终端配色',
   colorSummary: '文字、背景、光标、选区和 ANSI 调色板',
   colorHint:
-    '优先使用个人设置，其次是当前 DSH 配置中的 Rio 预设，最后才用各项的默认颜色。可输入 #RGB、#RGBA、#RRGGBB 或 #RRGGBBAA。取色器会保留已知的不透明度；未知时从不透明开始。',
+    '可输入 #RGB、#RGBA、#RRGGBB 或 #RRGGBBAA。取色器会保留已知的不透明度；未知时从不透明开始。',
   colorOverride: '个人设置',
   colorProfile: '当前 DSH 配置中的 Rio 预设',
   colorSourceUnavailable: '继承颜色的来源暂不可用',
@@ -243,9 +243,8 @@ const zh = {
   rio: 'Rio 默认',
   dsh: 'DSH 内置终端',
   ansiHint: '影响 ls 目录名等 ANSI 颜色；已单独指定的色位优先。',
-  baseColors: '自定义文字、背景、光标与选区',
+  baseColors: '自定义光标与选区',
   textAndBackground: '文字与背景',
-  followsDsh: '跟随 DSH 界面',
   previewColors: '调色板预览',
   opacity: '不透明度',
   palette: '自定义 16 个 ANSI 颜色',
@@ -272,9 +271,10 @@ const zh = {
   brightWhite: '亮白',
   chooseColor: '选择颜色',
   clear: '清除',
+  defaultValue: '默认',
   inherited: '继承',
   ifCleared: '清除后',
-  useInherited: '使用继承值',
+  useInherited: '恢复默认',
   on: '开启',
   off: '关闭',
   integerRange: '整数范围',
@@ -301,9 +301,8 @@ const zh = {
   reviewIssue: '检查未保存的修改',
   restore: '恢复默认设置…',
   keepSettings: '保留当前设置',
-  confirmRestore: '清除我的所有覆盖值',
-  confirmRestoreHint:
-    '要清除你的所有 Rio 覆盖值，改用继承设置吗？确认后立即生效。',
+  confirmRestore: '确认恢复默认',
+  confirmRestoreHint: '要将所有 Rio 设置恢复默认吗？确认后立即生效。',
 } satisfies Record<keyof typeof en, string>;
 
 export const preferenceMessages = { en, zh };

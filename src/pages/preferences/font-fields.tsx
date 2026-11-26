@@ -59,7 +59,7 @@ export function FontLayoutFields({
         {/* Only the sample uses live font values. Never apply a draft to a real terminal. */}
         <p
           style={{ fontFamily, fontSize }}
-          className="rio:m-0 rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:rounded-md rio:bg-muted rio:px-2.5 rio:py-1 rio:leading-normal rio:wrap-anywhere"
+          className="rio:box-border rio:m-0 rio:min-h-10 rio:w-full rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:rounded-settings rio:bg-muted rio:px-3 rio:py-2 rio:leading-normal rio:wrap-anywhere"
         >
           {t('fontSample')}
         </p>

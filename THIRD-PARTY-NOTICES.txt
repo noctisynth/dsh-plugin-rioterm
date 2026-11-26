@@ -5,6 +5,13 @@ Tailwind CSS — Copyright (c) Tailwind Labs, Inc.
 shadcn/ui — Copyright (c) 2023 shadcn (component conventions adapted for this plugin)
 clsx — Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
 tailwind-merge — Copyright (c) 2021 Dany Castillo
+Radix UI Primitives (@radix-ui/*) — Copyright (c) 2022 WorkOS
+Floating UI (@floating-ui/*) — Copyright (c) 2021-present Floating UI contributors
+aria-hidden, react-remove-scroll, react-style-singleton,
+use-callback-ref, use-sidecar — Copyright (c) 2017 Anton Korzunov
+get-nonce — Copyright (c) 2020 Anton Korzunov
+detect-node-es — Copyright (c) 2017 Ilya Kantor
+react-remove-scroll-bar — MIT License; author Anton Korzunov
 
 MIT License
 
@@ -38,3 +45,6 @@ https://rioterm.com/blog/2025/01/17/new-year-new-look
 
 class-variance-authority — Copyright 2022 Joe Bell.
 Licensed under Apache-2.0. Full license: docs/licenses/class-variance-authority.txt.
+
+tslib — Copyright (c) Microsoft Corporation.
+Licensed under 0BSD. Full license: docs/licenses/tslib.txt.

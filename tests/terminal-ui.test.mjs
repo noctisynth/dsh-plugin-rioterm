@@ -250,6 +250,11 @@ test('disabled find icon has no button or SVG on any status, independent of hove
 
 test('component class overrides merge by variant without changing unprefixed host classes', () => {
   assert.equal(
+    cn('rio:rounded-md', 'rio:rounded-settings'),
+    'rio:rounded-settings',
+  );
+  assert.equal(cn('rio:rounded-settings', 'rio:rounded-md'), 'rio:rounded-md');
+  assert.equal(
     cn('host-button rio:px-3 rio:hover:bg-primary', false, [
       'rio:px-5',
       'rio:hover:bg-accent',

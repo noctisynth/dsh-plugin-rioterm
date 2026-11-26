@@ -6,6 +6,17 @@ const bundled = [
   'class-variance-authority',
   'clsx',
   'tailwind-merge',
+  /^@radix-ui\//,
+  /^@floating-ui\//,
+  'aria-hidden',
+  'react-remove-scroll',
+  'react-remove-scroll-bar',
+  'react-style-singleton',
+  'get-nonce',
+  'use-callback-ref',
+  'use-sidecar',
+  'detect-node-es',
+  'tslib',
 ];
 
 // DSH loads classic scripts: evaluating the artifact must only register the factory.
@@ -23,12 +34,13 @@ export default defineConfig({
   deps: {
     alwaysBundle: bundled,
     onlyBundle: bundled,
-    neverBundle: ['react', 'react-dom'],
+    neverBundle: [/^react(?:\/.*)?$/, /^react-dom(?:\/.*)?$/],
   },
   // wasm-bindgen has an import.meta.url fallback. Our client always passes a Response;
   // don't synthesize a Node URL helper (or resolve the WASM relative to a combo script).
   define: {
     'import.meta.url': 'document.baseURI',
+    'process.env.NODE_ENV': JSON.stringify('production'),
     __RIO_UI_CSS__: JSON.stringify(await compileUiStyles()),
   },
   outputOptions: {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { createJiti } from 'jiti';
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
@@ -18,8 +18,49 @@ const { PreferencesPage } = await jiti.import(
 const { PreferenceAutosave } = await jiti.import(
   '../src/pages/preferences/preference-autosave.ts',
 );
+const { Select, SelectContent, SelectItem, SelectValue } = await jiti.import(
+  '../src/components/ui/select.tsx',
+);
 const { act } = TestRenderer;
+
+// Keep real Radix components in no-document mode for configuration callbacks.
+// Browser menu/keyboard behavior is covered by the separate jsdom Select tests.
+const originalGlobals = new Map(
+  ['window', 'HTMLFormElement'].map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
+  ]),
+);
+before(() => {
+  globalThis.HTMLFormElement = class HTMLFormElement {};
+  globalThis.window = {
+    setTimeout: (...args) => globalThis.setTimeout(...args),
+    clearTimeout: (...args) => globalThis.clearTimeout(...args),
+  };
+});
+after(() => {
+  for (const [key, descriptor] of originalGlobals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else delete globalThis[key];
+  }
+});
+
+function selectRoot(trigger) {
+  for (let node = trigger.parent; node; node = node.parent)
+    if (node.type === Select && typeof node.props.onValueChange === 'function')
+      return node;
+  assert.fail(`Missing Select root for ${trigger.props.name}`);
+}
 const palette = (slots) => Object.assign(Array(16).fill(''), slots);
+
+function sourceText(tree, input) {
+  const id = input.props['aria-describedby'].split(' ')[0];
+  const description = tree.root.findByProps({ id });
+  assert.equal(description.props.className, 'rio:sr-only');
+  assert.equal(description.props.hidden, undefined);
+  assert.equal(description.props['aria-hidden'], undefined);
+  return description.children.join('');
+}
 
 function mount(tc, copy) {
   let tree;
@@ -30,6 +71,7 @@ function mount(tc, copy) {
       fields,
       base: fieldsFrom(profile),
       sourcesReady: true,
+      writable: true,
       invalid: validateFields(fields).invalid,
       change: (...args) => changes.push(args),
       t: (key) => copy[key],
@@ -43,26 +85,27 @@ function mount(tc, copy) {
   render({}, {});
   tc.after(() => act(() => tree.unmount()));
   const field = (name) => tree.root.findByProps({ type: 'text', name });
-  const source = (name) => {
-    const id = field(name).props['aria-describedby'].split(' ')[0];
-    return tree.root.findByProps({ id }).children.join('');
-  };
+  const source = (name) => sourceText(tree, field(name));
+  const description = (name, suffix) =>
+    tree.root.findByProps({ id: `${field(name).props.id}-${suffix}` });
   const picker = (label) =>
     tree.root.findByProps({
       type: 'color',
       'aria-label': `${copy.chooseColor}: ${label}`,
     });
-  const clears = () => tree.root.findAllByType('button');
-  const hasText = (text) =>
+  const clears = () =>
     tree.root
-      .findAllByType('span')
-      .some((node) => node.children.join('') === text);
-  return { render, field, source, picker, clears, changes, hasText };
+      .findAllByType('button')
+      .filter((node) =>
+        node.props['aria-label']?.startsWith(`${copy.clear}: `),
+      );
+  return { render, field, source, description, picker, clears, changes };
 }
 
 for (const [lang, copy] of Object.entries(preferenceMessages)) {
   test(`${lang}: blank fields identify renderer defaults, not a fabricated inherited hex`, (tc) => {
     const view = mount(tc, copy);
+    assert.equal(copy.defaultValue, lang === 'zh' ? '默认' : 'Default');
     const defaults = {
       foreground: 'colorDshText',
       background: 'colorDshBackground',
@@ -78,21 +121,26 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
         : undefined;
       assert.equal(
         view.field(name).props.placeholder,
-        defaultHex ?? copy.inherited,
+        defaultHex ?? copy.defaultValue,
       );
       assert.equal(
         view.source(name),
         `${copy.inherited}: ${copy[sourceKey]}${defaultHex ? ` ${defaultHex}` : ''}`,
       );
+      const picker = view.picker(
+        ansiNames.includes(name)
+          ? `${ansiNames.indexOf(name)} · ${copy[name]}`
+          : copy[name],
+      );
+      assert.equal(
+        picker.props['aria-describedby'].split(' ')[0],
+        view.field(name).props['aria-describedby'].split(' ')[0],
+      );
       if (defaultHex) {
-        const picker = view.picker(
-          `${ansiNames.indexOf(name)} · ${copy[name]}`,
-        );
         assert.equal(picker.props.value, defaultHex);
         assert.ok(!picker.props['aria-describedby'].includes('opacity'));
       }
     }
-    assert.ok(view.hasText(copy.followsDsh));
     // When the theme hex is unknown, the native picker's seed stays behind
     // a neutral affordance. It never appears as a preference or a swatch.
     const picker = view.picker(copy.foreground);
@@ -122,11 +170,6 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       palette: palette({ 1: '#222', 2: '#343' }),
     };
     view.render(local, profile);
-    assert.ok(
-      view.hasText(
-        `${copy.foreground}: ${copy.colorOverride} · ${copy.background}: ${copy.colorProfile}`,
-      ),
-    );
     const afterClear = `${copy.colorOverride} · ${copy.ifCleared}: `;
     assert.equal(
       view.source('foreground'),
@@ -188,6 +231,14 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       `${copy.inherited}: ${copy.colorCurrentText} #abc0`,
     );
     assert.equal(view.picker(copy.cursor).props.value, '#aabbcc');
+    const opacity = view.description('cursor', 'opacity');
+    assert.equal(opacity.children.join(''), `${copy.opacity}: 0%`);
+    assert.ok(!opacity.props.className.includes('sr-only'));
+    assert.ok(
+      view
+        .picker(copy.cursor)
+        .props['aria-describedby'].includes(opacity.props.id),
+    );
     // After restore (empty draft), preview follows the profile text. No value is pinned.
     view.render({}, { foreground: '#def8' });
     assert.equal(
@@ -204,6 +255,16 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       !view.picker(copy.cursor).props['aria-describedby'].includes('opacity'),
     );
     assert.equal(view.field('cursor').props['aria-invalid'], true);
+    const error = view.description('cursor', 'error');
+    assert.equal(error.children.join(''), copy.invalidColor);
+    assert.ok(!error.props.className.includes('sr-only'));
+    assert.ok(
+      view.field('cursor').props['aria-describedby'].includes(error.props.id),
+    );
+    assert.equal(
+      view.source('cursor'),
+      `${copy.colorOverride} · ${copy.ifCleared}: ${copy.colorProfile} #abcd`,
+    );
   });
 
   test(`${lang}: switching the palette immediately saves only the preset, not 16 materialized colors`, async (tc) => {
@@ -252,21 +313,31 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
     });
     tc.after(() => act(() => tree.unmount()));
     const input = (name) => tree.root.findByProps({ type: 'text', name });
-    const select = tree.root
-      .findByType('fieldset')
-      .findAllByType('select')
-      .find((node) => node.props.name === 'ansiPreset');
+    const select = tree.root.find(
+      (node) =>
+        node.type === 'button' &&
+        node.props.role === 'combobox' &&
+        node.props.name === 'ansiPreset',
+    );
     const choose = (value) =>
       act(async () => {
-        select.props.onChange({ currentTarget: { value } });
+        selectRoot(select).props.onValueChange(value);
       });
-    assert.equal(select.props.value, '');
-    assert.ok(
-      select
-        .findAllByType('option')
-        .find((option) => option.props.value === '')
-        .children.join('')
-        .includes(copy.dsh),
+    assert.equal(select.props.value, 'dsh');
+    assert.equal(select.findByType(SelectValue).props.children, copy.dsh);
+    const content = React.Children.toArray(
+      selectRoot(select).props.children,
+    ).find((child) => child.type === SelectContent);
+    assert.ok(content);
+    assert.deepEqual(
+      React.Children.toArray(content.props.children).map((item) => {
+        assert.equal(item.type, SelectItem);
+        return [item.props.value, item.props.children];
+      }),
+      [
+        ['rio', copy.rio],
+        ['dsh', copy.dsh],
+      ],
     );
     const preview = (slot) =>
       tree.root
@@ -285,7 +356,17 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
     assert.equal(input('red').props.placeholder, '#abcd');
     assert.equal(input('green').props.value, '#123456');
     assert.deepEqual(saves, [[{ ...user, ansiPreset: 'rio' }, 5]]);
-    await choose('');
+    await act(async () => {
+      tree.root
+        .find(
+          (node) =>
+            node.type === 'button' &&
+            node.props['aria-label'] ===
+              `${copy.useInherited}: ${copy.ansiPreset}`,
+        )
+        .props.onClick();
+    });
+    assert.equal(select.props.value, 'dsh');
     assert.equal(input('blue').props.placeholder.toLowerCase(), '#3465a4');
     assert.deepEqual(saves[1], [user, 6]);
   });
@@ -328,10 +409,7 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
     });
     tc.after(() => act(() => tree.unmount()));
     const field = (name) => tree.root.findByProps({ type: 'text', name });
-    const source = (name) =>
-      tree.root
-        .findByProps({ id: field(name).props['aria-describedby'] })
-        .children.join('');
+    const source = (name) => sourceText(tree, field(name));
     assert.equal(source('red'), copy.colorSourceUnavailable);
     publish({ status: 'ready', revision: 1, base: { foreground: '#123' } });
     assert.ok(tree.root.findByType('fieldset').props.disabled);

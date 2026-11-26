@@ -4,7 +4,28 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import React from 'react';
+import * as JSXRuntime from 'react/jsx-runtime';
+import * as ReactDOM from 'react-dom';
 import TestRenderer from 'react-test-renderer';
+
+const hostModules = {
+  react: React,
+  'react-dom': ReactDOM,
+  'react/jsx-runtime': JSXRuntime,
+};
+function hostRequire(name) {
+  assert.ok(Object.hasOwn(hostModules, name), `unexpected external: ${name}`);
+  return hostModules[name];
+}
+function choose(trigger, value) {
+  for (let node = trigger.parent; node; node = node.parent) {
+    if (typeof node.props.onValueChange === 'function') {
+      node.props.onValueChange(value);
+      return;
+    }
+  }
+  assert.fail('missing Select value-change callback');
+}
 
 // DSH loads this as a classic script. Evaluating it must only register a
 // factory, without touching React, initializing WASM, or making requests.
@@ -17,32 +38,47 @@ async function loadBundle(document) {
     'utf8',
   );
   const registrations = [];
-  runInNewContext(script, {
+  const globals = {
     TextEncoder,
     TextDecoder,
-    ...(document ? { document } : {}),
+    HTMLFormElement: class HTMLFormElement {},
     AbortController,
     setTimeout,
     clearTimeout,
     crypto: webcrypto,
     localStorage: { length: 0, getItem: () => null },
     window: {
+      setTimeout,
+      clearTimeout,
       __ModuleLoader__: { load: (entry) => registrations.push(entry) },
     },
-  });
+  };
+  runInNewContext(script, globals);
   assert.equal(registrations.length, 1);
   assert.equal(registrations[0].id, manifest.name);
-  return { manifest, factory: registrations[0].factory };
+  return {
+    manifest,
+    factory(require) {
+      // Materialize without a DOM: this suite tests configuration callbacks and
+      // stylesheet ownership, not popup layout. Real DOM interaction lives in select-ui.test.mjs.
+      const client = registrations[0].factory(require);
+      if (document) globals.document = document;
+      return client;
+    },
+  };
 }
 test('the client registers lazily under the published package name', async () => {
   const { factory } = await loadBundle();
   const requested = new Set();
   const client = factory((name) => {
-    assert.equal(name, 'react');
     requested.add(name);
-    return React; // Component definitions may use forwardRef; the factory still mounts nothing.
+    return hostRequire(name); // Definitions may use forwardRef; the factory mounts nothing.
   });
-  assert.deepEqual([...requested], ['react']);
+  assert.deepEqual([...requested].sort(), [
+    'react',
+    'react-dom',
+    'react/jsx-runtime',
+  ]);
   assert.equal(typeof client.apply, 'function');
 });
 
@@ -63,10 +99,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
     head: { appendChild: (node) => styles.add(node) },
   };
   const { factory, manifest } = await loadBundle(document);
-  const client = factory((name) => {
-    assert.equal(name, 'react');
-    return React;
-  });
+  const client = factory(hostRequire);
   assert.equal(styles.size, 1); // Merely loading or materializing the factory installs nothing.
   const noop = () => {};
   const slots = new Map();
@@ -217,7 +250,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         1,
       );
       const status = () =>
-        settingsView.root.findByProps({ role: 'status' }).children.join('');
+        settingsView.root.findByProps({ role: 'status' }).props['aria-label'];
       const locked = () =>
         settingsView.root.findByType('fieldset').props.disabled;
       assert.equal(status(), t('loading'));
@@ -236,7 +269,9 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
       assert.equal(locked(), false);
       assert.deepEqual(writes, []); // Opening the page, even across Host events, never writes.
       const preset = settingsView.root
-        .findAllByType('select')
+        .findAll(
+          (node) => node.type === 'button' && node.props.role === 'combobox',
+        )
         .find((node) => node.props.name === 'ansiPreset');
       const fontSize = settingsView.root
         .findAllByType('input')
@@ -248,7 +283,7 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
       assert.equal(form.revision, 1);
       assert.deepEqual(form.user, {});
       await TestRenderer.act(async () => {
-        preset.props.onChange({ currentTarget: { value: 'dsh' } });
+        choose(preset, 'dsh');
       });
       assert.deepEqual(writes, [
         [{ op: 'set', path: ['fontSize'], value: 20 }],
@@ -260,11 +295,13 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         release = resolve;
       });
       const renderer = settingsView.root
-        .findAllByType('select')
+        .findAll(
+          (node) => node.type === 'button' && node.props.role === 'combobox',
+        )
         .find((node) => node.props.name === 'renderer');
       TestRenderer.act(() => {
-        preset.props.onChange({ currentTarget: { value: 'rio' } });
-        renderer.props.onChange({ currentTarget: { value: 'canvas' } });
+        choose(preset, 'rio');
+        choose(renderer, 'canvas');
       });
       assert.equal(writes.length, 3);
       TestRenderer.act(() => settingsView.unmount());
@@ -278,14 +315,13 @@ test('loading the built plugin leaves existing terminals untouched; only its gui
         settingsView = openSettings();
       });
       const bold = settingsView.root
-        .findAllByType('select')
+        .findAll(
+          (node) => node.type === 'button' && node.props.role === 'combobox',
+        )
         .find((node) => node.props.name === 'boldBright');
-      assert.deepEqual(
-        bold.findAllByType('option').map((option) => option.props.value),
-        ['', 'auto', 'always', 'never'],
-      );
+      assert.equal(bold.props.value, 'auto');
       await TestRenderer.act(async () => {
-        bold.props.onChange({ currentTarget: { value: 'always' } });
+        choose(bold, 'always');
       });
       assert.deepEqual(writes[4], [
         { op: 'set', path: ['boldBright'], value: 'always' },

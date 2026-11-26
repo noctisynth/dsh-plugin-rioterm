@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Button } from '../../components/ui/button.tsx';
+import { cn } from '../../lib/cn.ts';
 import {
   ansiNames,
   ansiPresets,
@@ -15,8 +16,8 @@ import {
   type FieldForm,
   hintClass,
   PreferenceTextInput,
-  SettingsRow,
   SettingsSection,
+  settingsButtonClass,
 } from './fields.tsx';
 
 type ColorName = (typeof colorFields)[number] | (typeof ansiNames)[number];
@@ -85,9 +86,12 @@ function ColorField({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const invalid = form.invalid.includes(name);
   return (
-    <div className="rio:grid rio:min-w-0 rio:gap-1">
+    <div className="rio:grid rio:min-w-0 rio:gap-2">
       <div className="rio:flex rio:flex-wrap rio:items-baseline rio:justify-between rio:gap-x-2">
-        <label className="rio:text-sm rio:font-medium" htmlFor={id}>
+        <label
+          className="rio:text-sm rio:font-normal rio:leading-[22px]"
+          htmlFor={id}
+        >
           {label}
         </label>
         {opacity !== undefined && (
@@ -96,8 +100,8 @@ function ColorField({
           </span>
         )}
       </div>
-      <div className="rio:flex rio:min-w-0 rio:items-center rio:gap-2">
-        <div className="rio:relative rio:size-9 rio:shrink-0">
+      <div className="rio:flex rio:min-w-0 rio:flex-wrap rio:items-center rio:gap-2">
+        <div className="rio:relative rio:size-10 rio:shrink-0">
           {/* A native picker needs a 6-digit seed. Do not display the UA seed as the theme or put it into the draft until a person picks a color. */}
           <input
             type="color"
@@ -107,7 +111,7 @@ function ColorField({
             aria-describedby={
               opacity === undefined ? sourceId : `${sourceId} ${id}-opacity`
             }
-            className="rio:box-border rio:size-full rio:cursor-pointer rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:p-1 rio:focus-visible:outline-2 rio:focus-visible:outline-solid rio:focus-visible:outline-ring rio:focus-visible:outline-offset-1"
+            className="rio:box-border rio:size-full rio:cursor-pointer rio:rounded-settings rio:border rio:border-solid rio:border-border rio:bg-muted rio:p-1 rio:focus-visible:outline-2 rio:focus-visible:outline-solid rio:focus-visible:outline-ring rio:focus-visible:outline-offset-1"
             onChange={(event) =>
               change(
                 name,
@@ -119,7 +123,7 @@ function ColorField({
           {!swatch && (
             <span
               aria-hidden="true"
-              className="rio:pointer-events-none rio:absolute rio:inset-px rio:grid rio:place-items-center rio:rounded-md rio:bg-muted rio:text-foreground"
+              className="rio:pointer-events-none rio:absolute rio:inset-px rio:grid rio:place-items-center rio:rounded-settings rio:bg-muted rio:text-foreground"
             >
               +
             </span>
@@ -131,18 +135,21 @@ function ColorField({
           id={id}
           dir="ltr"
           inputRef={inputRef}
-          placeholder={fallback && (fallback.hex ?? t('inherited'))}
+          placeholder={fallback && (fallback.hex ?? t('defaultValue'))}
           spellCheck={false}
           autoComplete="off"
           aria-invalid={invalid || undefined}
           aria-describedby={invalid ? `${sourceId} ${id}-error` : sourceId}
-          className={controlClass}
+          className={cn(
+            controlClass,
+            'rio:w-auto rio:min-w-[min(100%,6rem)] rio:flex-1',
+          )}
         />
         {value !== undefined && (
           <Button
             size="sm"
             variant="outline"
-            className="rio:shrink-0"
+            className={cn(settingsButtonClass, 'rio:shrink-0')}
             aria-label={`${t('clear')}: ${label}`}
             onClick={() => {
               change(name, '', 'immediate');
@@ -153,7 +160,7 @@ function ColorField({
           </Button>
         )}
       </div>
-      <p id={sourceId} className={hintClass}>
+      <p id={sourceId} className="rio:sr-only">
         {value !== undefined && `${t('colorOverride')} · `}
         {inherited}
       </p>
@@ -169,31 +176,17 @@ function ColorField({
   );
 }
 
-function baseColorSummary(form: FieldForm): string {
-  const { t, fields, base } = form;
-  if (!form.sourcesReady) return t('colorSourceUnavailable');
-  const source = (name: 'foreground' | 'background') =>
-    fields[name]
-      ? t('colorOverride')
-      : base[name]
-        ? t('colorProfile')
-        : t('followsDsh');
-  const text = source('foreground');
-  const background = source('background');
-  return text === background
-    ? text
-    : `${t('foreground')}: ${text} · ${t('background')}: ${background}`;
-}
-
 export function ColorFields({ form }: { form: FieldForm }) {
   const { t } = form;
   return (
     <SettingsSection title={t('colors')}>
-      <SettingsRow label={t('textAndBackground')}>
-        <span className="rio:text-sm rio:wrap-anywhere">
-          {baseColorSummary(form)}
-        </span>
-      </SettingsRow>
+      <section
+        aria-label={t('textAndBackground')}
+        className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] rio:gap-6 rio:py-3"
+      >
+        <ColorField name="foreground" form={form} />
+        <ColorField name="background" form={form} />
+      </section>
       <ChoiceField
         form={form}
         name="ansiPreset"
@@ -229,14 +222,16 @@ export function ColorFields({ form }: { form: FieldForm }) {
       />
       <Disclosure title={t('baseColors')}>
         <p className={hintClass}>{t('colorHint')}</p>
-        <div className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] rio:gap-3">
-          {colorFields.map((name) => (
-            <ColorField key={name} name={name} form={form} />
-          ))}
+        <div className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] rio:gap-x-6 rio:gap-y-6">
+          {colorFields
+            .filter((name) => name !== 'foreground' && name !== 'background')
+            .map((name) => (
+              <ColorField key={name} name={name} form={form} />
+            ))}
         </div>
       </Disclosure>
       <Disclosure title={t('palette')}>
-        <div className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] rio:gap-3">
+        <div className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] rio:gap-x-6 rio:gap-y-6">
           {ansiNames.map((name, index) => (
             <ColorField key={name} name={name} index={index} form={form} />
           ))}
