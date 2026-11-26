@@ -36,7 +36,10 @@ function assertCompiled(className, prefix = '') {
     const selector = `${prefix}.${token.replace(/[^\w-]/g, (ch) => `\\${ch}`)}`;
     assert.ok(
       [...cssSelectors].some(
-        (entry) => entry === selector || entry.startsWith(`${selector}:`),
+        (entry) =>
+          entry === selector ||
+          entry.startsWith(`${selector}:`) ||
+          entry.includes(` ${selector}:`),
       ),
       `no generated utility for ${token}`,
     );
@@ -137,6 +140,7 @@ test('search uses one themed outer boundary while its input and actions stay bor
       React.createElement(TerminalSearch, {
         t: key,
         status: 'connected',
+        alwaysVisible: true,
         searchRevision: 0,
         search: assert.fail,
         clearSearch() {},
@@ -188,6 +192,59 @@ test('search uses one themed outer boundary while its input and actions stay bor
     assert.match(css, /--dsw-alias-border-l2/);
   } finally {
     TestRenderer.act(() => tree.unmount());
+  }
+});
+
+test('disabled find icon has no button or SVG on any status, independent of hover and focus CSS', () => {
+  const props = {
+    t: key,
+    searchRevision: 0,
+    search: assert.fail,
+    clearSearch() {},
+    focusTerminal() {},
+  };
+  const tree = TestRenderer.create(
+    React.createElement(TerminalSearch, { ...props, status: 'connected' }),
+  );
+  try {
+    assert.equal(tree.root.findAllByType('button').length, 0);
+    assert.equal(tree.root.findAllByType('svg').length, 0);
+    for (const status of [
+      'connected',
+      'readonly',
+      'reconnecting',
+      'disconnected',
+      'missing',
+      'exited',
+    ]) {
+      tree.update(
+        React.createElement(TerminalSearch, {
+          ...props,
+          status,
+          alwaysVisible: true,
+        }),
+      );
+      const button = tree.root.findByType('button');
+      assertCompiled(button.props.className);
+      assert.ok(!button.props.className.includes(':opacity-0'));
+      assert.ok(!button.props.className.includes('[data-rio-terminal]'));
+      tree.update(
+        React.createElement(TerminalSearch, {
+          ...props,
+          status,
+          alwaysVisible: false,
+        }),
+      );
+      assert.equal(tree.root.findAllByType('button').length, 0);
+      assert.equal(tree.root.findAllByType('svg').length, 0);
+    }
+    assert.ok(
+      ![...cssSelectors].some((selector) =>
+        selector.includes('[data-rio-terminal]:not(:hover)'),
+      ),
+    );
+  } finally {
+    tree.unmount();
   }
 });
 

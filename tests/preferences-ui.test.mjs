@@ -215,6 +215,41 @@ test('typed blank waits for debounce, but inherit buttons apply immediately; res
   );
 });
 
+test('search icon visibility defaults off, saves immediately and can return to profile inheritance', async (tc) => {
+  const editor = new Editor();
+  const view = mount(tc, editor);
+  assert.equal(view.field('searchIconAlwaysVisible').props.checked, false);
+  view.toggle('searchIconAlwaysVisible', true);
+  assert.deepEqual(editor.writes[0], {
+    revision: 7,
+    next: { searchIconAlwaysVisible: true },
+  });
+  await settled();
+  view.toggle('searchIconAlwaysVisible', false);
+  assert.deepEqual(editor.writes[1], {
+    revision: 8,
+    next: { searchIconAlwaysVisible: false },
+  });
+  await settled();
+  view.click(`${en.useInherited}: ${en.searchIconAlwaysVisible}`);
+  await settled();
+  assert.deepEqual(editor.writes[2], { revision: 9, next: {} });
+  assert.equal(view.field('searchIconAlwaysVisible').props.checked, false);
+
+  const inherited = new Editor({ base: { searchIconAlwaysVisible: true } });
+  const other = mount(tc, inherited);
+  assert.equal(other.field('searchIconAlwaysVisible').props.checked, true);
+  other.toggle('searchIconAlwaysVisible', false);
+  await settled();
+  assert.deepEqual(inherited.writes[0].next, {
+    searchIconAlwaysVisible: false,
+  });
+  other.click(`${en.useInherited}: ${en.searchIconAlwaysVisible}`);
+  await settled();
+  assert.equal(other.field('searchIconAlwaysVisible').props.checked, true);
+  assert.deepEqual(inherited.writes[1].next, {});
+});
+
 function enclosingSections(node) {
   const sections = [];
   for (let parent = node.parent; parent; parent = parent.parent) {
@@ -262,7 +297,13 @@ test('four localized group headings and common settings are visible; only detail
         'fit',
       ],
       ['ansiPreset', 'boldBright'],
-      ['scrollback', 'altIsMeta', 'detectUrls', 'autoFocus'],
+      [
+        'scrollback',
+        'altIsMeta',
+        'detectUrls',
+        'autoFocus',
+        'searchIconAlwaysVisible',
+      ],
       ['renderer'],
     ];
     for (const [index, names] of visibleFields.entries()) {

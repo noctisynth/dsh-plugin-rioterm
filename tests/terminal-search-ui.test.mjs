@@ -40,6 +40,10 @@ function panel(t, overrides = {}) {
     shell.addEventListener(type, (e) => shellKeys.push([e.type, e.key]));
   }
   const section = {
+    focus() {
+      doc.activeElement = section;
+      focus.push('section');
+    },
     addEventListener(type, fn, capture) {
       assert.equal(
         capture,
@@ -78,6 +82,7 @@ function panel(t, overrides = {}) {
   const calls = [];
   let props = {
     status: 'connected',
+    alwaysVisible: true,
     t: tKey,
     search(query, direction) {
       calls.push([query, direction]);
@@ -165,7 +170,8 @@ for (const [platform, isMac] of [
 ]) {
   test(`only the terminal section consumes its platform find chords (${platform})`, (t) => {
     t.mock.getter(globalThis, 'navigator', () => ({ platform }));
-    const p = panel(t);
+    const p = panel(t, { alwaysVisible: undefined });
+    assert.equal(p.button('findOutput'), undefined);
     const key = (data) => p.send('keydown', p.shell, 'f', data);
     assert.equal(key({ ctrlKey: true }), false); // Ctrl+F remains a shell binding.
     assert.equal(key({ metaKey: true, shiftKey: true }), false);
@@ -190,6 +196,62 @@ for (const [platform, isMac] of [
     assert.deepEqual(p.calls, ['clear']);
   });
 }
+
+test('icon visibility can change live without disabling shortcuts or resetting an open search', (t) => {
+  const p = panel(t, { alwaysVisible: undefined });
+  assert.equal(p.button('findOutput'), undefined);
+  p.update({ alwaysVisible: true });
+  assert.ok(p.button('findOutput'));
+  p.update({ alwaysVisible: false });
+  assert.equal(p.button('findOutput'), undefined);
+  assert.equal(
+    p.send('keydown', p.shell, 'f', { ctrlKey: true, shiftKey: true }),
+    true,
+  );
+  p.change('retained query');
+  const input = p.input();
+  const focusCount = p.focus.length;
+  for (const alwaysVisible of [true, false]) {
+    p.update({ alwaysVisible });
+    assert.ok(p.input() === input);
+    assert.equal(p.input().props.value, 'retained query');
+    assert.equal(p.focus.length, focusCount);
+    assert.ok(
+      p.tree.root
+        .findByType('search')
+        .props.className.includes('rio:pointer-events-auto'),
+    );
+  }
+  p.send('keydown', p.field, 'Escape');
+  assert.equal(p.button('findOutput'), undefined);
+  assert.equal(p.focus.at(-1), 'shell');
+});
+
+test('closing shortcut-only search on a non-writable terminal returns focus to the panel, never a missing icon', (t) => {
+  for (const status of [
+    'readonly',
+    'disconnected',
+    'reconnecting',
+    'exited',
+    'missing',
+  ]) {
+    const p = panel(t, { status, alwaysVisible: false });
+    assert.equal(p.button('findOutput'), undefined);
+    p.send('keydown', p.shell, 'f', { ctrlKey: true, shiftKey: true });
+    p.send('keydown', p.field, 'Escape');
+    assert.equal(p.button('findOutput'), undefined);
+    assert.deepEqual(p.focus, ['field', 'section']);
+    assert.equal(
+      p.send('keydown', p.doc.activeElement, 'f', {
+        ctrlKey: true,
+        shiftKey: true,
+      }),
+      true,
+    );
+    assert.ok(p.input());
+    p.unmount();
+  }
+});
 
 test('find stays at the top while compact terminal notices occupy the bottom', (t) => {
   const p = panel(t);
@@ -461,12 +523,30 @@ test('selected page owns the search UI; switching panes discards the draft witho
   const style = original.props.style;
   const open = () => act(() => tree.root.findByType('button').props.onClick());
   try {
+    assert.equal(tree.root.findAllByType('button').length, 0);
+    assert.equal(tree.root.findByType('section').props.tabIndex, -1);
+    act(() => {
+      terminalView.preferences = {
+        ...defaultEffectivePreferences,
+        searchIconAlwaysVisible: true,
+      };
+      tree.update(render(true));
+    });
+    assert.equal(tree.root.findAllByType('button').length, 1);
+    assert.ok(viewport() === original);
     open();
     act(() =>
       tree.root
         .findByType('input')
         .props.onChange({ currentTarget: { value: 'private to this pane' } }),
     );
+    const input = tree.root.findByType('input');
+    act(() => {
+      terminalView.preferences = defaultEffectivePreferences;
+      tree.update(render(true));
+    });
+    assert.ok(tree.root.findByType('input') === input);
+    assert.equal(input.props.value, 'private to this pane');
     assert.deepEqual(viewport().children, []);
     assert.deepEqual(viewport().props.style, style);
     for (const state of [
@@ -477,7 +557,13 @@ test('selected page owns the search UI; switching panes discards the draft witho
       assert.equal(tree.root.findAllByType('input').length, 0);
       assert.equal(tree.root.findAllByType('button').length, 0);
     }
-    act(() => tree.update(render(true)));
+    act(() => {
+      terminalView.preferences = {
+        ...defaultEffectivePreferences,
+        searchIconAlwaysVisible: true,
+      };
+      tree.update(render(true));
+    });
     open();
     assert.equal(tree.root.findByType('input').props.value, '');
     assert.equal(viewport(), original);
@@ -491,5 +577,6 @@ test('selected page owns the search UI; switching panes discards the draft witho
   } finally {
     act(() => tree.unmount());
     terminalView.state = { status: 'connected', hasScreenContent: true };
+    terminalView.preferences = defaultEffectivePreferences;
   }
 });

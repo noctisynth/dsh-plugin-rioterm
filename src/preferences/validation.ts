@@ -111,6 +111,7 @@ function assign(
       break;
     case 'fit':
     case 'autoFocus':
+    case 'searchIconAlwaysVisible':
     case 'predictiveEcho':
     case 'altIsMeta':
     case 'detectUrls':

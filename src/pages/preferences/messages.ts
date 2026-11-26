@@ -39,6 +39,9 @@ const en = {
   fit: 'Fit the grid to the panel',
   fitHint:
     'While visible and in control, request a grid size that fits the panel. Turn off to keep the host grid size.',
+  searchIconAlwaysVisible: 'Always show the search icon',
+  searchIconHint:
+    'Off by default: the icon is hidden on all devices, including on hover or focus. Use ⌘F on macOS or Ctrl+Shift+F to search. Turn on to show the icon.',
   autoFocus: 'Focus the terminal when opening or switching to its tab',
   focusHint:
     'Type immediately when the selected terminal is ready for input. Changing this setting does not move focus.',
@@ -192,6 +195,9 @@ const zh = {
   fit: '网格适应面板大小',
   fitHint:
     '当终端可见且持有输入权时，请求与面板匹配的行列数。关闭后保留宿主网格大小。',
+  searchIconAlwaysVisible: '搜索图标常驻显示',
+  searchIconHint:
+    '默认关闭：完全隐藏图标，鼠标移入、聚焦或触屏操作均不显示。可用 ⌘F（macOS）或 Ctrl+Shift+F 搜索；开启后才显示图标。',
   autoFocus: '打开或切回标签时聚焦终端',
   focusHint: '选中的终端就绪后即可直接输入。更改此设置不会移动当前焦点。',
   rendering: '渲染',

@@ -24,6 +24,11 @@ export function InteractionFields({ form }: { form: FieldForm }) {
       <ToggleField form={form} name="altIsMeta" />
       <ToggleField form={form} name="detectUrls" />
       <ToggleField form={form} name="autoFocus" hint={t('focusHint')} />
+      <ToggleField
+        form={form}
+        name="searchIconAlwaysVisible"
+        hint={t('searchIconHint')}
+      />
     </SettingsSection>
   );
 }

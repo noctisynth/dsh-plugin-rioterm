@@ -12,6 +12,7 @@ import type { TerminalViewState } from './terminal-mount.ts';
 interface SearchProps extends SearchEngine {
   focusTerminal(): void;
   searchRevision: number;
+  alwaysVisible?: boolean;
   status: TerminalViewState['status'];
   t: TerminalTranslate;
 }
@@ -64,7 +65,11 @@ function SearchSpinner() {
   );
 }
 
-export function TerminalSearch({ focusTerminal, ...props }: SearchProps) {
+export function TerminalSearch({
+  focusTerminal,
+  alwaysVisible = false,
+  ...props
+}: SearchProps) {
   const { status, t } = props;
   const [open, setOpen] = React.useState(false);
   const root = React.useRef<HTMLDivElement>(null);
@@ -90,10 +95,16 @@ export function TerminalSearch({ focusTerminal, ...props }: SearchProps) {
       node?.contains(doc.activeElement)
     ) {
       if (status === 'connected') focusTerminal();
-      else returnToTrigger.current = true;
+      else if (alwaysVisible) returnToTrigger.current = true;
+      else {
+        // No trigger exists when disabled. Keep shortcuts reachable without taking PTY control.
+        node
+          .closest<HTMLElement>('[data-rio-terminal]')
+          ?.focus({ preventScroll: true });
+      }
     }
     setOpen(false);
-  }, [focusTerminal, status]);
+  }, [focusTerminal, status, alwaysVisible]);
   React.useLayoutEffect(() => {
     const doc = root.current?.ownerDocument;
     if (!doc || doc.hidden || !doc.hasFocus()) return;
@@ -162,23 +173,23 @@ export function TerminalSearch({ focusTerminal, ...props }: SearchProps) {
   return (
     <div
       ref={root}
-      className="rio:absolute rio:top-2 rio:end-2 rio:z-10 rio:max-w-[calc(100%_-_1rem)]"
+      className="rio:pointer-events-none rio:absolute rio:top-2 rio:end-2 rio:z-10 rio:max-w-[calc(100%_-_1rem)]"
     >
       {open ? (
         <FindBar {...props} input={input} close={close} />
-      ) : (
+      ) : alwaysVisible ? (
         <Button
           variant="ghost"
           size="sm"
           aria-label={t('findOutput')}
           title={`${t('findOutput')} (${mac ? '⌘F' : 'Ctrl+Shift+F'})`}
           aria-keyshortcuts={mac ? 'Meta+F Control+Shift+F' : 'Control+Shift+F'}
-          className="rio:size-7 rio:p-0 rio:[@media(hover:hover)]:[[data-rio-terminal]:not(:hover)_&:not(:focus-visible)]:opacity-65"
+          className="rio:pointer-events-auto rio:size-7 rio:p-0"
           onClick={show}
         >
           <Magnifier />
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -260,7 +271,7 @@ function FindBar({
   return (
     <search
       aria-label={t('findOutput')}
-      className="rio:box-border rio:flex rio:w-96 rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:px-2 rio:py-1 rio:text-foreground rio:shadow-md"
+      className="rio:pointer-events-auto rio:box-border rio:flex rio:w-96 rio:max-w-full rio:items-center rio:gap-1 rio:rounded-md rio:border rio:border-solid rio:border-border rio:bg-background rio:px-2 rio:py-1 rio:text-foreground rio:shadow-md"
     >
       <div className="rio:relative rio:min-w-0 rio:flex-1">
         <Input

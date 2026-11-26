@@ -58,7 +58,14 @@ test('inherited fonts track the terminal role independently, including after cle
   assert.equal(get().fontFamily, `"Rio Mono", ${terminalFontStack}`);
   save({});
   assert.equal(get().fontFamily, terminalFontStack);
-  assert.equal(seen.length, 5);
+  assert.equal(get().searchIconAlwaysVisible, false);
+  save({ searchIconAlwaysVisible: true });
+  assert.equal(get().searchIconAlwaysVisible, true);
+  save({ searchIconAlwaysVisible: false });
+  assert.equal(get().searchIconAlwaysVisible, false);
+  save({});
+  assert.equal(get().searchIconAlwaysVisible, false);
+  assert.equal(seen.length, 8);
   stop();
   assert.equal(listeners.size + themeListeners.size, 0);
 });
@@ -115,6 +122,8 @@ test('reject malformed drafts; isolate invalid persisted fields rather than losi
     { ansiPreset: 'automatic' },
     { boldBright: 'inherit' },
     { boldBright: true },
+    { searchIconAlwaysVisible: 'false' },
+    { searchIconAlwaysVisible: 1 },
     { fontFamily: 'url(https://invalid.test)' },
     { fontFamily: 'x; color:red' },
     { foreground: 'red; display:none' },

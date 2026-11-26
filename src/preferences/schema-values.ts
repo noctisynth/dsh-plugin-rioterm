@@ -48,6 +48,7 @@ export interface RioPreferenceValues
   scrollback: number;
   altIsMeta: boolean;
   autoFocus: boolean;
+  searchIconAlwaysVisible: boolean;
   fit: boolean;
   detectUrls: boolean;
   ansiPreset: AnsiPreset;
@@ -71,6 +72,7 @@ export const preferenceDefaults: RioPreferenceValues = {
   scrollback: -1,
   altIsMeta: true,
   autoFocus: true,
+  searchIconAlwaysVisible: false,
   fit: true,
   detectUrls: true,
   foreground: '',

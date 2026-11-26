@@ -43,6 +43,7 @@ export function TerminalPage({
   return (
     <section
       aria-label={t('title')}
+      tabIndex={-1}
       data-rio-ui="terminal"
       data-rio-terminal
       className="rio:relative rio:isolate rio:h-full rio:w-full rio:min-h-0 rio:min-w-0 rio:overflow-hidden rio:bg-background rio:text-foreground"
@@ -76,6 +77,7 @@ export function TerminalPage({
           clearSearch={mount.clearSearch}
           focusTerminal={mount.focusTerminal}
           searchRevision={mount.searchRevision}
+          alwaysVisible={preferences.searchIconAlwaysVisible}
           status={state.status}
           t={t}
         />

@@ -72,12 +72,15 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   assert.deepEqual(first.value, preferenceDefaults);
   assert.deepEqual(first.user, {});
   assert.equal(first.value.autoFocus, true);
+  assert.equal(first.value.searchIconAlwaysVisible, false);
+  const searchVisibility = fiber.effectiveConfig.searchIconAlwaysVisible;
   const form = new z(JSON.parse(JSON.stringify(first.schema)));
   assert.deepEqual(form({}), preferenceDefaults); // Client wire projection contains plain values, not Volatile refs.
   await root.settings.mutate(
     ns,
     [
       { op: 'set', path: ['autoFocus'], value: false },
+      { op: 'set', path: ['searchIconAlwaysVisible'], value: true },
       { op: 'set', path: ['ansiPreset'], value: 'dsh' },
       { op: 'set', path: ['fontSize'], value: 17 },
       { op: 'set', path: ['scrollback'], value: 0 },
@@ -90,8 +93,12 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   assert.ok(saved.revision > first.revision);
   assert.ok(events.some(([id, rev]) => id === ns && rev === saved.revision));
   assert.equal(saved.value.autoFocus, false);
+  assert.equal(saved.value.searchIconAlwaysVisible, true);
+  assert.equal(fiber.effectiveConfig.searchIconAlwaysVisible, searchVisibility);
+  assert.equal(searchVisibility.get(), true);
   assert.deepEqual(persisted, {
     autoFocus: false,
+    searchIconAlwaysVisible: true,
     ansiPreset: 'dsh',
     fontSize: 17,
     scrollback: 0,
@@ -126,6 +133,7 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
     [
       { op: 'unset', path: ['fontSize'] },
       { op: 'unset', path: ['autoFocus'] },
+      { op: 'unset', path: ['searchIconAlwaysVisible'] },
       { op: 'unset', path: ['paddingTop'] },
       { op: 'unset', path: ['ansiPreset'] },
     ],
@@ -133,6 +141,8 @@ test('installed Loader and SettingsForms discover, validate, fence and publish R
   );
   assert.deepEqual(persisted, { scrollback: 0, paddingRight: 64 });
   assert.equal(describe().value.autoFocus, true);
+  assert.equal(describe().value.searchIconAlwaysVisible, false);
+  assert.equal(searchVisibility.get(), false);
   assert.equal(describe().value.ansiPreset, 'rio');
   assert.equal(describe().value.paddingTop, 16);
   assert.equal(ref.get(), 0);

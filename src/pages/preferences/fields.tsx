@@ -310,6 +310,7 @@ type ToggleName =
   | 'detectUrls'
   | 'predictiveEcho'
   | 'autoFocus'
+  | 'searchIconAlwaysVisible'
   | 'fit';
 export function ToggleField({
   form,

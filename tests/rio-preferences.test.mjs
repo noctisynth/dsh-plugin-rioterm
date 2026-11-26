@@ -245,6 +245,21 @@ test('view changes and late fonts preserve the parsed grid, scroll position, sel
 });
 
 for (const renderer of ['dom', 'canvas']) {
+  test(`${renderer} search icon visibility never rebuilds the screen or sends terminal traffic`, (t) => {
+    const p = { ...defaults, renderer };
+    const { view, mounted, sizes, inputs, core } = viewport(t, p);
+    core.writable = true;
+    core.write('retained output');
+    const original = core.term;
+    const output = core.term.dump();
+    view.setPreferences({ ...p, searchIconAlwaysVisible: true });
+    view.setPreferences({ ...p, searchIconAlwaysVisible: false });
+    assert.equal(mounted.length, 1);
+    assert.ok(core.term === original);
+    assert.equal(core.term.dump(), output);
+    assert.deepEqual(sizes, []);
+    assert.deepEqual(inputs, []);
+  });
   test(`${renderer} repaints effective ANSI changes without replacing the grid or proposing a resize`, (t) => {
     const p = { ...defaults, renderer };
     const { view, mounted, sizes, inputs, core } = viewport(t, p);

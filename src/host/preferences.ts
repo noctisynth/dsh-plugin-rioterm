@@ -62,6 +62,10 @@ export const Config = z.object({
   altIsMeta: z.boolean().default(defaults.altIsMeta).volatile(),
   detectUrls: z.boolean().default(defaults.detectUrls).volatile(),
   autoFocus: z.boolean().default(defaults.autoFocus).volatile(),
+  searchIconAlwaysVisible: z
+    .boolean()
+    .default(defaults.searchIconAlwaysVisible)
+    .volatile(),
   fit: z.boolean().default(defaults.fit).volatile(),
   foreground: color.default(defaults.foreground).volatile(),
   background: color.default(defaults.background).volatile(),
