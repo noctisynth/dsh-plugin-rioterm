@@ -256,6 +256,14 @@ export function bindKeyboardInput(
   };
   input.addEventListener('keydown', key, events);
   input.addEventListener('keyup', key, events);
+  function focusInput() {
+    input.focus({ preventScroll: true });
+    // Opening/switching tabs, returning from find and explicit takeover all
+    // restore typing, not keyboard navigation. Clear after the synchronous
+    // focus handler, including when an already-focused input emits no event.
+    // Native focus outside these helpers keeps its normal focus-visible hint.
+    root.removeAttribute('data-rio-keyboard-focus');
+  }
   return {
     reset,
     positionComposition,
@@ -268,7 +276,7 @@ export function bindKeyboardInput(
         root.getClientRects().length &&
         !root.closest(hiddenAncestor)
       ) {
-        input.focus({ preventScroll: true });
+        focusInput();
       }
     },
     setWritable(writable: boolean) {
@@ -276,7 +284,7 @@ export function bindKeyboardInput(
       if (!writable) reset();
     },
     focus() {
-      if (!signal.aborted && core.visible) input.focus({ preventScroll: true });
+      if (!signal.aborted && core.visible) focusInput();
     },
     blur() {
       input.blur();

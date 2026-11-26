@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { before, test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 import { initWasm } from 'rioterm';
+import { mountTerminalView } from '../src/pages/terminal/terminal-mount.ts';
 import { defaultEffectivePreferences as defaults } from '../src/preferences/values.ts';
 import {
   beginAutoFocus,
@@ -236,6 +238,7 @@ function keyboardFixture(t) {
     predictiveEcho: true,
   });
   const predicted = [];
+  const attributes = new Set();
   let resets = 0,
     focuses = 0;
   const lifetime = new AbortController();
@@ -244,11 +247,19 @@ function keyboardFixture(t) {
     ...events(),
     style: {},
     setAttribute() {},
+    matches: (selector) => selector === ':focus-visible',
     focus(options) {
       assert.deepEqual(options, { preventScroll: true });
       focuses++;
+      if (doc.activeElement === input) return;
+      doc.activeElement = input;
+      input.fire('focus');
     },
-    blur() {},
+    blur() {
+      if (doc.activeElement !== input) return;
+      doc.activeElement = doc.body;
+      input.fire('blur');
+    },
   };
   const doc = {
     ...events(),
@@ -267,8 +278,11 @@ function keyboardFixture(t) {
     },
     getClientRects: () => [{}],
     closest: () => null,
-    removeAttribute() {},
-    toggleAttribute() {},
+    removeAttribute: (name) => attributes.delete(name),
+    toggleAttribute(name, present) {
+      if (present) attributes.add(name);
+      else attributes.delete(name);
+    },
   };
   const view = {
     cellWidth: 9,
@@ -295,10 +309,214 @@ function keyboardFixture(t) {
     keyboard,
     predicted,
     focuses: () => focuses,
+    indicated: () => attributes.has('data-rio-keyboard-focus'),
     resets: () => resets,
     lifetime,
   };
 }
+
+test('all programmatic terminal focus is ring-free, including activation, find restoration and takeover', (t) => {
+  for (const method of ['focusIfInteractive', 'focus']) {
+    const { core, writes, input, doc, keyboard, focuses, indicated } =
+      keyboardFixture(t);
+    core.writable = true;
+    keyboard[method]();
+    assert.equal(focuses(), 1, method);
+    assert.equal(doc.activeElement, input, method);
+    assert.equal(
+      indicated(),
+      false,
+      `${method}: programmatic focus must not highlight the whole screen`,
+    );
+    input.blur();
+    input.focus({ preventScroll: true }); // Model a new native keyboard-navigation focus.
+    assert.equal(
+      indicated(),
+      true,
+      'native keyboard focus remains distinguishable',
+    );
+    const before = focuses();
+    keyboard[method]();
+    assert.equal(focuses(), before + 1);
+    assert.equal(doc.activeElement, input);
+    assert.equal(
+      indicated(),
+      false,
+      'also clear an existing ring when focus emits no event',
+    );
+    input.blur();
+    input.focus({ preventScroll: true });
+    assert.equal(
+      indicated(),
+      true,
+      'programmatic suppression must not persist into native focus',
+    );
+    keyboard.blur();
+    assert.equal(indicated(), false);
+    assert.deepEqual(writes, []);
+    keyboard[method]();
+    input.fire('keydown', { key: 'x', code: 'KeyX' });
+    assert.deepEqual(
+      writes,
+      [['x', true]],
+      'ring-free focus still accepts terminal input',
+    );
+  }
+});
+
+test('keyboard navigation preserves focus indication until pointer input or blur, without PTY writes', (t) => {
+  const {
+    core,
+    writes,
+    input,
+    doc,
+    root,
+    view,
+    keyboard,
+    lifetime,
+    indicated: focused,
+  } = keyboardFixture(t);
+  core.writable = true;
+  let focusVisible = true;
+  input.matches = (selector) => selector === ':focus-visible' && focusVisible;
+  input.focus({ preventScroll: true });
+  assert.equal(focused(), true);
+  input.blur(); // Focus moves to another control.
+  assert.equal(focused(), false);
+  input.focus({ preventScroll: true }); // Model native keyboard navigation, not our focus helper.
+  assert.equal(doc.activeElement, input);
+  assert.equal(
+    focused(),
+    true,
+    'do not hide keyboard focus to mask a paint defect',
+  );
+
+  Object.assign(root, events(), { setPointerCapture() {} });
+  const pointerView = {
+    ...view,
+    cellAt: () => ({ row: 0, col: 0, sideRight: false }),
+  };
+  bindPointerInput(
+    root,
+    core,
+    () => pointerView,
+    keyboard.focus,
+    lifetime.signal,
+  );
+  root.fire('pointerdown', { button: 0, pointerType: 'mouse', pointerId: 1 });
+  assert.equal(doc.activeElement, input);
+  assert.equal(
+    focused(),
+    false,
+    'a click clears only the indication, not focus',
+  );
+  keyboard.focusIfInteractive();
+  assert.equal(
+    focused(),
+    false,
+    'focusing an already focused input emits no focus event',
+  );
+  input.blur();
+  input.focus({ preventScroll: true });
+  assert.equal(focused(), true);
+  input.blur();
+  focusVisible = false;
+  input.focus({ preventScroll: true });
+  assert.equal(
+    focused(),
+    false,
+    'non-visible focus must not retain a stale ring',
+  );
+  input.blur();
+  focusVisible = true;
+  input.focus({ preventScroll: true });
+  assert.equal(focused(), true);
+  input.blur();
+  assert.equal(focused(), false);
+  assert.deepEqual(writes, []);
+});
+
+test('real mount-to-keyboard handoffs keep opening, repeated tab switches, find and takeover ring-free', async (t) => {
+  const { core, writes, input, doc, keyboard, focuses, indicated } =
+    keyboardFixture(t);
+  core.writable = true;
+  const tab = { active: true, visible: true };
+  let panel;
+  const view = mountTerminalView({
+    ticket: 'existing-terminal',
+    tabState: () => tab,
+    beginAutoFocus: () => new AbortController(),
+    loadEngine: async () => {},
+    onState() {},
+    session: {
+      needsLaunch: () => false,
+      environment: async () => ({}),
+      mount(_ticket, _limits, target) {
+        panel = target;
+        return {
+          reconnect() {
+            target.status('reconnecting');
+            return true;
+          },
+          setVisible() {},
+          detach() {},
+        };
+      },
+    },
+    createScreen: () => ({
+      focus: keyboard.focus,
+      focusIfInteractive: keyboard.focusIfInteractive,
+      setVisible(visible) {
+        core.visible = visible;
+        if (!visible) keyboard.blur();
+      },
+      dispose: keyboard.blur,
+    }),
+  });
+  t.after(() => view.dispose());
+  await setImmediate();
+  panel.status('connected');
+  await Promise.resolve();
+  const assertInput = (message) => {
+    assert.equal(doc.activeElement, input, message);
+    assert.equal(indicated(), false, message);
+  };
+  assertInput('initial activation');
+  assert.equal(focuses(), 1);
+  for (const field of ['active', 'visible', 'active', 'visible']) {
+    tab[field] = false;
+    view.syncTabState();
+    input.blur();
+    tab[field] = true;
+    view.syncTabState();
+    await Promise.resolve();
+    assertInput(`returning to a retained tab: ${field}`);
+  }
+  assert.equal(focuses(), 5);
+  input.blur();
+  view.focusTerminal();
+  assertInput('closing find');
+  core.writable = false;
+  panel.status('readonly');
+  input.blur();
+  view.retry(true);
+  assertInput('explicit takeover may focus before write ownership arrives');
+  core.writable = true;
+  panel.status('connected');
+  await Promise.resolve();
+  assertInput('ownership confirmation');
+  input.blur();
+  panel.status('reconnecting');
+  panel.status('connected');
+  await Promise.resolve();
+  assert.notEqual(
+    doc.activeElement,
+    input,
+    'background reconnect must not steal focus',
+  );
+  assert.equal(indicated(), false);
+  assert.deepEqual(writes, []);
+});
 
 test('a keyboard activation may leave the composer focused; later interaction cancels even without changing activeElement', async (t) => {
   const { root, doc } = keyboardFixture(t);
@@ -385,7 +603,7 @@ test('a retained tab activation observes cancellation while its host is still in
   }
 });
 
-test('automatic focus requires a visible foreground writer; explicit focus still works on takeover', (t) => {
+test('automatic focus requires a visible foreground writer; explicit takeover keeps its own guards', (t) => {
   for (const blocked of [
     'readonly',
     'hidden tab',
@@ -396,7 +614,8 @@ test('automatic focus requires a visible foreground writer; explicit focus still
     'disposed',
     'none',
   ]) {
-    const { root, core, keyboard, focuses, doc, lifetime } = keyboardFixture(t);
+    const { root, core, keyboard, focuses, doc, lifetime, indicated } =
+      keyboardFixture(t);
     core.writable = blocked !== 'readonly';
     core.visible = blocked !== 'hidden tab';
     doc.hidden = blocked === 'hidden document';
@@ -404,11 +623,22 @@ test('automatic focus requires a visible foreground writer; explicit focus still
     root.getClientRects = () => (blocked === 'no box' ? [] : [{}]);
     root.closest = () => (blocked === 'inert ancestor' ? {} : null);
     if (blocked === 'disposed') lifetime.abort();
+    root.toggleAttribute('data-rio-keyboard-focus', true);
     keyboard.focusIfInteractive();
     assert.equal(focuses(), Number(blocked === 'none'), blocked);
-    if (blocked === 'readonly') {
+    assert.equal(
+      indicated(),
+      blocked !== 'none',
+      'a rejected handoff must not mutate focus decoration',
+    );
+    if (
+      blocked === 'readonly' ||
+      blocked === 'hidden tab' ||
+      blocked === 'disposed'
+    ) {
       keyboard.focus();
-      assert.equal(focuses(), 1);
+      assert.equal(focuses(), Number(blocked === 'readonly'));
+      assert.equal(indicated(), blocked !== 'readonly');
     }
   }
 });

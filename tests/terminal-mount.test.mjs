@@ -121,6 +121,46 @@ test('find navigates only the current local screen, even read-only, and never ac
   assert.deepEqual(view.search('error', 'refresh'), empty);
 });
 
+test('closing find restores only connected foreground input, independent of automatic activation', async () => {
+  const f = fixture({ autoFocus: false });
+  const view = mountTerminalView(f.options);
+  const focuses = () =>
+    f.events.filter((event) => event === 'autofocus').length;
+  view.focusTerminal();
+  assert.equal(focuses(), 0);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  f.panel.status('connected');
+  await Promise.resolve();
+  assert.equal(focuses(), 0);
+  view.focusTerminal();
+  assert.equal(focuses(), 1);
+  for (const field of ['active', 'visible']) {
+    f.tab[field] = false;
+    view.focusTerminal();
+    assert.equal(focuses(), 1, field);
+    f.tab[field] = true;
+  }
+  for (const status of [
+    'readonly',
+    'reconnecting',
+    'disconnected',
+    'exited',
+    'failed',
+  ]) {
+    f.panel.status(status);
+    view.focusTerminal();
+    assert.equal(focuses(), 1, status);
+  }
+  f.panel.status('connected');
+  view.focusTerminal();
+  assert.equal(focuses(), 2);
+  view.dispose();
+  view.focusTerminal();
+  assert.equal(focuses(), 2);
+});
+
 test('disposing during either async preflight cannot attach a stale page or report late failure', async () => {
   const before = fixture();
   const first = mountTerminalView(before.options);

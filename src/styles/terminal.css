@@ -43,12 +43,23 @@
     }
   }
 
-  [data-rio-screen][data-rio-keyboard-focus] {
-    outline: 1px solid
+  [data-rio-screen] {
+    isolation: isolate;
+  }
+
+  /* Keep keyboard focus visible above either opaque renderer. A root outline
+     inset into the grid can leave partial edges at the renderer/clip boundary. */
+  [data-rio-screen][data-rio-keyboard-focus]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    pointer-events: none;
+    border: 1px solid
       var(
         --dsw-focus-ring-color,
         var(--dsw-alias-state-business-primary, Highlight)
       );
-    outline-offset: -1px;
   }
 }

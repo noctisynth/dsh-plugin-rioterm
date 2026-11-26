@@ -71,6 +71,46 @@ test('the emitted stylesheet has no document selectors, unowned properties, impo
   );
 });
 
+test('terminal keyboard focus paints above the renderer without changing grid geometry or intercepting pointers', () => {
+  const sheet = postcss.parse(css);
+  const rules = new Map();
+  sheet.walkRules((rule) => {
+    if (!rule.selector.includes('[data-rio-screen]')) return;
+    const values = new Map();
+    rule.walkDecls((decl) => values.set(decl.prop, decl.value));
+    rules.set(rule.selector.replace('::after', ':after'), values);
+  });
+  const screen = rules.get('[data-rio-screen]');
+  assert.equal(screen?.get('isolation'), 'isolate');
+  const ring = rules.get('[data-rio-screen][data-rio-keyboard-focus]:after');
+  assert.ok(
+    ring,
+    'focus indication must be a separate overlay, not a root outline',
+  );
+  for (const [property, value] of [
+    ['position', 'absolute'],
+    ['inset', '0'],
+    ['z-index', '1'],
+    ['box-sizing', 'border-box'],
+    ['pointer-events', 'none'],
+  ])
+    assert.equal(ring.get(property), value, property);
+  assert.match(ring.get('content'), /^(?:""|'')$/);
+  assert.match(ring.get('border'), /1px solid var\(--dsw-focus-ring-color/);
+  for (const [selector, values] of rules) {
+    assert.equal(values.has('outline'), false, selector);
+    assert.equal(values.has('outline-offset'), false, selector);
+    if (!selector.endsWith(':after')) {
+      assert.equal(
+        values.has('border'),
+        false,
+        'the grid root must not lose a border width',
+      );
+      assert.equal(values.has('padding'), false);
+    }
+  }
+});
+
 test('search feedback animation and borderless inset utilities compile inside the Rio scope', () => {
   assertCompiled(
     'rio:animate-search-spin rio:motion-reduce:animate-none rio:pe-[min(7rem,50%)] rio:max-w-[calc(50%_-_0.5rem)] rio:border-0 rio:bg-transparent',

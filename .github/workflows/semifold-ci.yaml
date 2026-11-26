@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   quality:
+    name: Quality
     uses: ./.github/workflows/quality.yaml
   release:
     name: Version or Publish

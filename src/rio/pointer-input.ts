@@ -93,7 +93,6 @@ export function bindPointerInput(
       candidate = undefined;
       if (event.button !== 0 || !core.visible) return;
       focus();
-      root.removeAttribute('data-rio-keyboard-focus');
       if (event.pointerType === 'touch') return;
       const link = hit(event);
       if (link) {
