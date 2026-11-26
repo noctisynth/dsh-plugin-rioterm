@@ -162,7 +162,7 @@ export function TerminalSearch({ focusTerminal, ...props }: SearchProps) {
   return (
     <div
       ref={root}
-      className={`rio:absolute rio:end-2 rio:z-10 rio:max-w-[calc(100%_-_1rem)] ${status === 'connected' ? 'rio:top-2' : 'rio:bottom-2'}`}
+      className="rio:absolute rio:top-2 rio:end-2 rio:z-10 rio:max-w-[calc(100%_-_1rem)]"
     >
       {open ? (
         <FindBar {...props} input={input} close={close} />

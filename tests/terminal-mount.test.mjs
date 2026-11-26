@@ -56,6 +56,10 @@ function fixture({ knownIdentity = true, autoFocus = true } = {}) {
       bindings = input;
       events.push(['screen', limits]);
       return {
+        snapshot: (...args) => events.push(['snapshot', ...args]),
+        write: (data) => events.push(['output', data]),
+        resize: (...args) => events.push(['screen resize', ...args]),
+        setWritable: (writable) => events.push(['writable', writable]),
         search(query, direction) {
           events.push(['search', query, direction]);
           return { index: 1, count: 3, truncated: false };
@@ -87,6 +91,64 @@ function fixture({ knownIdentity = true, autoFocus = true } = {}) {
 }
 
 const loading = ['state', { status: 'loading' }];
+
+test('notices preserve rendered content, not merely an allocated screen, across reconnects', async () => {
+  const f = fixture({ autoFocus: false });
+  const view = mountTerminalView(f.options);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  try {
+    f.panel.status('missing');
+    assert.deepEqual(f.events.at(-1), ['state', { status: 'missing' }]);
+    f.panel.screen.snapshot(80, 24, 'previous output');
+    f.panel.screen.write('more output');
+    f.panel.screen.resize(90, 30);
+    f.panel.screen.setWritable(false);
+    assert.deepEqual(f.events.slice(-4), [
+      ['snapshot', 80, 24, 'previous output'],
+      ['output', 'more output'],
+      ['screen resize', 90, 30],
+      ['writable', false],
+    ]);
+    for (const status of [
+      'connected',
+      'readonly',
+      'disconnected',
+      'reconnecting',
+      'missing',
+      'exited',
+      'failed',
+    ]) {
+      f.panel.status(status, 'diagnostic');
+      assert.deepEqual(f.events.at(-1), [
+        'state',
+        { status, detail: 'diagnostic', hasScreenContent: true },
+      ]);
+    }
+  } finally {
+    view.dispose();
+  }
+});
+
+test('a new preflight resets notice content state when the old screen is disposed', async () => {
+  const f = fixture({ knownIdentity: false, autoFocus: false });
+  const view = mountTerminalView(f.options);
+  f.engine.resolve();
+  f.environment.resolve({});
+  await setImmediate();
+  try {
+    f.panel.screen.snapshot(80, 24, '');
+    f.panel.status('disconnected');
+    assert.equal(f.events.at(-1)[1].hasScreenContent, true);
+    view.retry();
+    await setImmediate();
+    f.panel.status('missing');
+    assert.deepEqual(f.events.at(-1), ['state', { status: 'missing' }]);
+  } finally {
+    view.dispose();
+  }
+});
 test('an idle page does not download WASM, discover a shell or consume a launch ticket', () => {
   const f = fixture();
   f.options.session.needsLaunch = () => true;

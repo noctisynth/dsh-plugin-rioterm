@@ -70,20 +70,16 @@ export function TerminalPage({
       <span role="status" className="rio:sr-only">
         {visible && state.status === 'connected' ? t('ready') : null}
       </span>
-      {visible &&
-        active &&
-        state.status !== 'idle' &&
-        state.status !== 'resourceFailed' &&
-        state.status !== 'wasmFailed' && (
-          <TerminalSearch
-            search={mount.search}
-            clearSearch={mount.clearSearch}
-            focusTerminal={mount.focusTerminal}
-            searchRevision={mount.searchRevision}
-            status={state.status}
-            t={t}
-          />
-        )}
+      {visible && active && state.hasScreenContent && (
+        <TerminalSearch
+          search={mount.search}
+          clearSearch={mount.clearSearch}
+          focusTerminal={mount.focusTerminal}
+          searchRevision={mount.searchRevision}
+          status={state.status}
+          t={t}
+        />
+      )}
       <TerminalNotice
         state={state}
         t={t}

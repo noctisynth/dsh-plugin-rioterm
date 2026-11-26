@@ -43,6 +43,10 @@
     }
   }
 
+  [data-rio-notice-details][open] > summary svg {
+    transform: rotate(90deg);
+  }
+
   [data-rio-screen] {
     isolation: isolate;
   }

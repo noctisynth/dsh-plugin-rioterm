@@ -1,17 +1,29 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
 import { terminalMessages } from '../src/pages/terminal/messages.ts';
 import { defaultEffectivePreferences } from '../src/preferences/values.ts';
 import { EMPTY_SEARCH_RESULT } from '../src/terminal/search.ts';
+import { terminalView } from './fixtures/terminal-page-mount.mjs';
 
 const jiti = createJiti(import.meta.url, { jsx: true, fsCache: false });
 const { TerminalSearch } = await jiti.import(
   '../src/pages/terminal/terminal-search.tsx',
 );
-const { TerminalPage } = await jiti.import(
+const pageJiti = createJiti(import.meta.url, {
+  jsx: true,
+  fsCache: false,
+  moduleCache: false,
+  alias: {
+    './use-terminal-mount.ts': fileURLToPath(
+      new URL('./fixtures/terminal-page-mount.mjs', import.meta.url),
+    ),
+  },
+});
+const { TerminalPage } = await pageJiti.import(
   '../src/pages/terminal/terminal-page.tsx',
 );
 const { act } = TestRenderer;
@@ -178,6 +190,23 @@ for (const [platform, isMac] of [
     assert.deepEqual(p.calls, ['clear']);
   });
 }
+
+test('find stays at the top while compact terminal notices occupy the bottom', (t) => {
+  const p = panel(t);
+  for (const status of [
+    'connected',
+    'readonly',
+    'reconnecting',
+    'disconnected',
+    'missing',
+    'exited',
+  ]) {
+    p.update({ status });
+    const frame = p.tree.root.findAllByType('div')[0];
+    assert.ok(frame.props.className.includes('rio:top-2'));
+    assert.ok(!frame.props.className.includes('rio:bottom-2'));
+  }
+});
 
 test('typing is debounced, explicit navigation commits the latest text, and revisions refresh in place', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -452,7 +481,15 @@ test('selected page owns the search UI; switching panes discards the draft witho
     open();
     assert.equal(tree.root.findByType('input').props.value, '');
     assert.equal(viewport(), original);
+    act(() => {
+      terminalView.state = { status: 'loading', hasScreenContent: false };
+      tree.update(render(true));
+    });
+    assert.equal(tree.root.findAllByType(TerminalSearch).length, 0);
+    assert.equal(tree.root.findAllByType('button').length, 0);
+    assert.equal(viewport(), original);
   } finally {
     act(() => tree.unmount());
+    terminalView.state = { status: 'connected', hasScreenContent: true };
   }
 });

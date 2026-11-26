@@ -313,7 +313,9 @@ test('the viewport keeps its own content box and applies four live insets withou
     assert.equal(viewport.parent, root);
     assert.equal(viewport.props['aria-busy'], true);
     assert.equal(root.props['aria-busy'], undefined);
-    const ready = root.findByType('span');
+    const ready = root.find(
+      (node) => node.type === 'span' && node.props.role === 'status',
+    );
     assert.equal(ready.props.role, 'status');
     assert.deepEqual(ready.children, []);
     assertCompiled(ready.props.className);
@@ -387,6 +389,100 @@ test('takeover transfers focus only from the active button in a foreground docum
   }
 });
 
+test('missing sessions use a borderless empty state or a compact bottom notice when output exists', () => {
+  let opens = 0;
+  const render = (hasScreenContent) =>
+    React.createElement(TerminalNotice, {
+      state: { status: 'missing', hasScreenContent },
+      t: key,
+      onOpenNew: () => opens++,
+      onRetry: assert.fail,
+      onStart: assert.fail,
+    });
+  const tree = TestRenderer.create(render(false));
+  try {
+    const frame = tree.root.findByProps({ 'data-rio-notice': 'empty' });
+    assert.ok(frame.props.className.includes('rio:inset-0'));
+    assert.ok(frame.props.className.includes('rio:overflow-auto'));
+    const group = tree.root.findByProps({ role: 'group' });
+    assert.ok(group.props.className.includes('rio:border-0'));
+    assert.ok(group.props.className.includes('rio:bg-transparent'));
+    assert.ok(group.props.className.includes('rio:my-auto'));
+    assert.deepEqual(
+      tree.root.find(
+        (node) =>
+          node.type === 'div' &&
+          node.props.id === group.props['aria-labelledby'],
+      ).children,
+      ['missing'],
+    );
+    assert.deepEqual(
+      tree.root.find(
+        (node) =>
+          node.type === 'div' &&
+          node.props.id === group.props['aria-describedby'],
+      ).children,
+      ['missingDescription'],
+    );
+    assert.ok(
+      tree.root.findByType('button').props.className.includes('rio:bg-primary'),
+    );
+    assert.equal(tree.root.findByType('details').props.open, undefined);
+    const diagnostic = tree.root
+      .findAllByProps({ 'data-slot': 'alert-description' })
+      .at(-1);
+    assert.deepEqual(diagnostic.children, ['missingTechnical']);
+    tree.root.findByType('button').props.onClick();
+    assert.equal(opens, 1);
+    tree.update(render(true));
+    const compact = tree.root.findByProps({ 'data-rio-notice': 'compact' });
+    assert.ok(compact.props.className.includes('rio:bottom-2'));
+    assert.ok(!compact.props.className.includes('rio:inset-0'));
+    assert.equal(
+      tree.root.findByProps({ role: 'group' }).props['aria-describedby'],
+      undefined,
+    );
+    assert.equal(
+      tree.root.findAllByProps({ 'data-slot': 'alert-description' }).length,
+      1,
+    );
+    tree.root.findByType('button').props.onClick();
+    assert.equal(opens, 2);
+  } finally {
+    tree.unmount();
+  }
+});
+
+test('compact notices retain input ownership and reconnect feedback in their live message', () => {
+  for (const [status, detail, message] of [
+    ['readonly', undefined, 'readonlyCompact'],
+    ['readonly', 'transport lost', 'readonlyDisconnectedCompact'],
+    ['reconnecting', undefined, 'reconnectingCompact'],
+    ['disconnected', undefined, 'disconnectedCompact'],
+  ]) {
+    const tree = TestRenderer.create(
+      React.createElement(TerminalNotice, {
+        state: { status, detail, hasScreenContent: true },
+        t: key,
+        onRetry: assert.fail,
+      }),
+    );
+    try {
+      const live = tree.root.find(
+        (node) => node.type === 'div' && node.props.role === 'status',
+      );
+      assert.deepEqual(live.children, [message]);
+      for (const node of tree.root.findAll(
+        (node) => typeof node.type === 'string',
+      )) {
+        if (node.props.className) assertCompiled(node.props.className);
+      }
+    } finally {
+      tree.unmount();
+    }
+  }
+});
+
 test('all notice states expose just their intended action, native disclosure and one live message', () => {
   const cases = [
     ['connected'],
@@ -434,12 +530,20 @@ test('all notice states expose just their intended action, native disclosure and
       assert.equal(live[0].findAllByType('button').length, 0);
       const details = tree.root.findByType('details');
       assert.equal(details.props.open, undefined);
-      assert.deepEqual(details.findByType('summary').children, ['details']);
+      assert.deepEqual(
+        details
+          .findByType('summary')
+          .children.filter((child) => typeof child === 'string'),
+        ['details'],
+      );
       const buttons = tree.root.findAllByType('button');
       assert.equal(buttons.length, label ? 1 : 0);
       assert.deepEqual(actions, []);
       if (label) {
-        assert.deepEqual(buttons[0].children, [label]);
+        assert.deepEqual(
+          buttons[0].children.filter((child) => typeof child === 'string'),
+          [label],
+        );
         buttons[0].props.onClick({
           currentTarget: { ownerDocument: { activeElement: null } },
         });

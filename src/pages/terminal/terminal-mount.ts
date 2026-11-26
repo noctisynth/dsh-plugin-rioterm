@@ -13,6 +13,8 @@ import { EMPTY_SEARCH_RESULT } from '../../terminal/search.ts';
 export interface TerminalViewState {
   status: TerminalStatus | 'idle' | 'loading' | 'resourceFailed' | 'wasmFailed';
   detail?: string;
+  /** This screen accepted a snapshot/output (even blank); preserve it behind notices. */
+  hasScreenContent?: boolean;
 }
 
 interface ViewOptions {
@@ -174,12 +176,29 @@ function startAttempt(
       });
       const { visible } = tabState();
       screen.setVisible(visible);
+      const renderedScreen = screen;
+      let hasScreenContent = false;
       attachment = session.mount(ticket, limits, {
         visible,
-        screen,
+        screen: {
+          snapshot(cols, rows, data) {
+            renderedScreen.snapshot(cols, rows, data);
+            hasScreenContent = true;
+          },
+          write(data) {
+            renderedScreen.write(data);
+            hasScreenContent = true;
+          },
+          resize: (cols, rows) => renderedScreen.resize(cols, rows),
+          setWritable: (writable) => renderedScreen.setWritable(writable),
+        },
         status(status, detail) {
           if (!mounted) return;
-          onState(detail ? { status, detail } : { status });
+          onState({
+            status,
+            ...(detail ? { detail } : {}),
+            ...(hasScreenContent ? { hasScreenContent: true } : {}),
+          });
         },
       });
     })
