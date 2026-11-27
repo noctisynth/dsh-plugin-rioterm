@@ -30,19 +30,15 @@ const buttonVariants = cva(
 type ButtonProps = React.ComponentPropsWithoutRef<'button'> &
   VariantProps<typeof buttonVariants>;
 
-export function Button({
-  className,
-  variant,
-  size,
-  type = 'button',
-  ...props
-}: ButtonProps): React.ReactElement {
-  return (
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, type = 'button', ...props }, ref) => (
     <button
+      ref={ref}
       data-slot="button"
       type={type}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />
-  );
-}
+  ),
+);
+Button.displayName = 'Button';

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Button } from '../../components/ui/button.tsx';
 import { cn } from '../../lib/cn.ts';
 import {
   ansiNames,
@@ -8,7 +7,9 @@ import {
   colorFields,
   colorPattern,
 } from '../../preferences/values.ts';
-import { defaultAnsiColor } from '../../rio/theme-defaults.ts';
+import { defaultAnsiColor, usesBoldBright } from '../../rio/theme-defaults.ts';
+import { ColorPicker } from './color-picker.tsx';
+import { FieldResetAction } from './field-reset-action.tsx';
 import {
   ChoiceField,
   controlClass,
@@ -17,7 +18,6 @@ import {
   hintClass,
   PreferenceTextInput,
   SettingsSection,
-  settingsButtonClass,
 } from './fields.tsx';
 
 type ColorName = (typeof colorFields)[number] | (typeof ansiNames)[number];
@@ -88,12 +88,20 @@ function ColorField({
   return (
     <div className="rio:grid rio:min-w-0 rio:gap-2">
       <div className="rio:flex rio:flex-wrap rio:items-baseline rio:justify-between rio:gap-x-2">
-        <label
-          className="rio:text-sm rio:font-normal rio:leading-[22px]"
-          htmlFor={id}
-        >
-          {label}
-        </label>
+        <div className="rio:flex rio:min-w-0 rio:flex-wrap rio:items-baseline rio:gap-x-2">
+          <label
+            className="rio:text-sm rio:font-normal rio:leading-[22px]"
+            htmlFor={id}
+          >
+            {label}
+          </label>
+          <FieldResetAction
+            form={form}
+            names={[name]}
+            label={label}
+            onResetFocus={() => inputRef.current?.focus()}
+          />
+        </div>
         {opacity !== undefined && (
           <span id={`${id}-opacity`} className={hintClass}>
             {t('opacity')}: {opacity}%
@@ -101,34 +109,18 @@ function ColorField({
         )}
       </div>
       <div className="rio:flex rio:min-w-0 rio:flex-wrap rio:items-center rio:gap-2">
-        <div className="rio:relative rio:size-10 rio:shrink-0">
-          {/* A native picker needs a 6-digit seed. Do not display the UA seed as the theme or put it into the draft until a person picks a color. */}
-          <input
-            type="color"
-            value={swatch?.slice(0, 7) ?? '#000000'}
-            aria-label={`${t('chooseColor')}: ${label}`}
-            title={`${t('chooseColor')}: ${label}`}
-            aria-describedby={
-              opacity === undefined ? sourceId : `${sourceId} ${id}-opacity`
-            }
-            className="rio:box-border rio:size-full rio:cursor-pointer rio:rounded-settings rio:border rio:border-solid rio:border-border rio:bg-muted rio:p-1 rio:focus-visible:outline-2 rio:focus-visible:outline-solid rio:focus-visible:outline-ring rio:focus-visible:outline-offset-1"
-            onChange={(event) =>
-              change(
-                name,
-                event.currentTarget.value + (alpha ?? ''),
-                'immediate',
-              )
-            }
-          />
-          {!swatch && (
-            <span
-              aria-hidden="true"
-              className="rio:pointer-events-none rio:absolute rio:inset-px rio:grid rio:place-items-center rio:rounded-settings rio:bg-muted rio:text-foreground"
-            >
-              +
-            </span>
-          )}
-        </div>
+        <ColorPicker
+          value={swatch}
+          disabled={!form.writable}
+          label={label}
+          describedBy={
+            opacity === undefined ? sourceId : `${sourceId} ${id}-opacity`
+          }
+          t={t}
+          onValueChange={(color) => {
+            if (form.writable) change(name, color, 'immediate');
+          }}
+        />
         <PreferenceTextInput
           form={form}
           name={name}
@@ -145,20 +137,6 @@ function ColorField({
             'rio:w-auto rio:min-w-[min(100%,6rem)] rio:flex-1',
           )}
         />
-        {value !== undefined && (
-          <Button
-            size="sm"
-            variant="outline"
-            className={cn(settingsButtonClass, 'rio:shrink-0')}
-            aria-label={`${t('clear')}: ${label}`}
-            onClick={() => {
-              change(name, '', 'immediate');
-              inputRef.current?.focus();
-            }}
-          >
-            {t('clear')}
-          </Button>
-        )}
       </div>
       <p id={sourceId} className="rio:sr-only">
         {value !== undefined && `${t('colorOverride')} · `}
@@ -176,10 +154,106 @@ function ColorField({
   );
 }
 
+// These CSS fallbacks match the renderer without mounting a terminal or resolving
+// the host's dynamic colors into persisted preferences.
+const previewDefaults = {
+  foreground: 'var(--dsw-alias-label-primary, CanvasText)',
+  background: 'var(--dsw-alias-bg-base, Canvas)',
+  cursor: 'currentColor',
+  selectionForeground: 'HighlightText',
+  selectionBackground: 'Highlight',
+};
+
+function ColorPreview({ form }: { form: FieldForm }) {
+  const { fields, base, t } = form;
+  if (!form.sourcesReady) return null;
+  const ansiPreset =
+    (fields.ansiPreset ?? base.ansiPreset) === 'dsh' ? 'dsh' : 'rio';
+  const boldBright = fields.boldBright ?? base.boldBright;
+  const bright = usesBoldBright({
+    ansiPreset,
+    boldBright:
+      boldBright === 'always' || boldBright === 'never' ? boldBright : 'auto',
+  });
+  const color = (name: ColorName): string =>
+    expandHex(fields[name]) ??
+    expandHex(base[name]) ??
+    (name in previewDefaults
+      ? previewDefaults[name as keyof typeof previewDefaults]
+      : (expandHex(
+          defaultAnsiColor(name as (typeof ansiNames)[number], ansiPreset),
+        ) ?? previewDefaults.foreground));
+  const invalid = [...colorFields, ...ansiNames].some(
+    (name) => fields[name] !== undefined && !expandHex(fields[name]),
+  );
+  return (
+    <figure
+      data-rio-preview="color"
+      aria-label={t('colorPreview')}
+      className="rio:m-0 rio:grid rio:w-full rio:min-w-0 rio:gap-2 rio:py-2"
+    >
+      <figcaption className={hintClass}>{t('colorPreview')}</figcaption>
+      <div
+        className="rio:grid rio:min-w-0 rio:gap-2 rio:rounded-settings rio:border rio:border-solid rio:border-border rio:p-3 rio:font-mono rio:text-sm rio:leading-relaxed rio:wrap-anywhere"
+        style={{
+          color: color('foreground'),
+          backgroundColor: color('background'),
+        }}
+      >
+        <div>{t('colorSample')}</div>
+        <div className="rio:flex rio:flex-wrap rio:gap-x-3 rio:gap-y-1">
+          {ansiNames.slice(0, 8).map((name) => (
+            <span key={name} style={{ color: color(name) }}>
+              {t(name)}
+            </span>
+          ))}
+        </div>
+        <div className="rio:flex rio:flex-wrap rio:items-center rio:gap-3">
+          <strong style={{ color: color(bright ? 'brightBlue' : 'blue') }}>
+            {t('boldSample')}
+          </strong>
+          <span
+            style={{
+              color: color('selectionForeground'),
+              backgroundColor: color('selectionBackground'),
+            }}
+          >
+            {t('selectionSample')}
+          </span>
+          <span
+            aria-hidden="true"
+            className="rio:inline-block rio:h-4 rio:w-2"
+            style={{ backgroundColor: color('cursor') }}
+          />
+        </div>
+      </div>
+      <div
+        role="img"
+        aria-label={t('previewColors')}
+        className="rio:flex rio:min-w-0 rio:overflow-hidden rio:rounded-sm"
+      >
+        {ansiNames.map((name) => (
+          <span
+            key={name}
+            title={`${t(name)}: ${color(name)}`}
+            className="rio:h-2 rio:flex-1"
+            style={{ backgroundColor: color(name) }}
+          />
+        ))}
+      </div>
+      {invalid && <p className={hintClass}>{t('colorPreviewFallback')}</p>}
+    </figure>
+  );
+}
+
 export function ColorFields({ form }: { form: FieldForm }) {
   const { t } = form;
   return (
-    <SettingsSection title={t('colors')}>
+    <SettingsSection
+      title={t('colors')}
+      description={t('colorSummary')}
+      preview={<ColorPreview form={form} />}
+    >
       <section
         aria-label={t('textAndBackground')}
         className="rio:grid rio:min-w-0 rio:grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] rio:gap-6 rio:py-3"
@@ -193,27 +267,6 @@ export function ColorFields({ form }: { form: FieldForm }) {
         options={ansiPresets}
         hint={t('ansiHint')}
       />
-      {form.sourcesReady && (
-        <div
-          role="img"
-          aria-label={t('previewColors')}
-          className="rio:flex rio:min-w-0 rio:overflow-hidden rio:rounded-sm"
-        >
-          {ansiNames.map((name) => {
-            const color = expandHex(
-              form.fields[name] ?? inheritedColor(form, name).hex,
-            );
-            return (
-              <span
-                key={name}
-                title={`${t(name)}: ${color ?? t('invalidColor')}`}
-                className="rio:h-2 rio:flex-1"
-                style={{ backgroundColor: color }}
-              />
-            );
-          })}
-        </div>
-      )}
       <ChoiceField
         form={form}
         name="boldBright"

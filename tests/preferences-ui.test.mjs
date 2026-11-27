@@ -17,10 +17,13 @@ const { PreferencesPage } = await jiti.import(
 const { Select, SelectContent, SelectItem, SelectValue } = await jiti.import(
   '../src/components/ui/select.tsx',
 );
+const { ColorPicker } = await jiti.import(
+  '../src/pages/preferences/color-picker.tsx',
+);
 const { act } = TestRenderer;
 
 // Configuration/draft tests keep Radix in its no-document mode. Real popup,
-// keyboard and focus behavior belongs to the separate jsdom Select tests.
+// keyboard and focus behavior belongs to the separate jsdom Select and ColorPicker tests.
 const originalGlobals = new Map(
   ['window', 'HTMLFormElement'].map((key) => [
     key,
@@ -40,6 +43,16 @@ after(() => {
     else delete globalThis[key];
   }
 });
+
+function colorPickerRoot(trigger) {
+  for (let node = trigger.parent; node; node = node.parent)
+    if (node.type === ColorPicker) return node;
+  assert.fail(`Missing ColorPicker root for ${trigger.props['aria-label']}`);
+}
+
+function chooseColor(trigger, fullHex) {
+  act(() => colorPickerRoot(trigger).props.onValueChange(fullHex));
+}
 
 function selectRoot(trigger) {
   for (let node = trigger.parent; node; node = node.parent)
@@ -196,10 +209,8 @@ test('fonts start independently inherited; a clean form follows Host changes wit
   assert.equal(view.field('fontSize').props.placeholder, '19');
   assert.equal(view.field('fontFamily').props.value, '');
   assert.equal(view.field('fontFamily').props.placeholder, fonts.fontFamily);
-  assert.ok(
-    view.tree.root.findByType('bdi').children.includes(fonts.fontFamily),
-  );
-  assert.match(JSON.stringify(view.tree.toJSON()), /15.*px/);
+  const figure = view.tree.root.findByProps({ 'data-rio-preview': 'font' });
+  assert.equal(figure.findByType('figcaption').children[0], en.fontPreview);
   const sample = () =>
     view.tree.root.find(
       (node) => node.type === 'p' && node.children[0] === en.fontSample,
@@ -231,6 +242,62 @@ test('fonts start independently inherited; a clean form follows Host changes wit
   view.publish({ user: { fontSize: 20 }, revision: 9 });
   assert.equal(view.field('fontFamily').props.value, '');
   assert.equal(view.field('fontSize').props.value, '20');
+});
+
+test('font and color previews are standalone blocks below section headings and before editable options', (tc) => {
+  for (const copy of Object.values(preferenceMessages)) {
+    const editor = new Editor();
+    const view = mount(tc, editor, undefined, (key) => copy[key]);
+    for (const [kind, title, description] of [
+      ['font', copy.fontLayout, copy.fontHelp],
+      ['color', copy.colors, copy.colorSummary],
+    ]) {
+      const heading = view.tree.root
+        .findAllByType('h4')
+        .find((node) => node.children.includes(title));
+      const header = heading.parent;
+      const section = header.parent;
+      assert.ok(
+        header
+          .findAllByType('p')
+          .some((node) => node.children.includes(description)),
+      );
+      const figure = section.findByProps({ 'data-rio-preview': kind });
+      assert.equal(figure.type, 'figure');
+      const directChild = (child) => {
+        let node = child;
+        while (node.parent !== section) node = node.parent;
+        return node;
+      };
+      assert.equal(section.children.indexOf(directChild(figure)), 1);
+      const firstControl = section.findAll((node) =>
+        ['input', 'button', 'select'].includes(node.type),
+      )[0];
+      assert.ok(section.children.indexOf(directChild(firstControl)) > 1);
+      assert.equal(
+        figure.findAll((node) =>
+          ['input', 'button', 'select', 'textarea'].includes(node.type),
+        ).length,
+        0,
+      );
+      assert.equal(
+        figure.findAll((node) =>
+          node.props.className?.includes('rio:@min-[30rem]:grid-cols-'),
+        ).length,
+        0,
+      );
+      assert.equal(figure.props.tabIndex, undefined);
+      assert.ok(figure.props.className.includes('rio:w-full'));
+    }
+    assert.equal(
+      view.tree.root.findAllByProps({
+        role: 'img',
+        'aria-label': copy.previewColors,
+      }).length,
+      1,
+    );
+    assert.deepEqual(editor.writes, []);
+  }
 });
 
 test('typed blank waits for debounce, but inherit buttons apply immediately; restore requires a second explicit click', async (tc) => {
@@ -407,10 +474,12 @@ test('four localized group headings and common settings are visible; only detail
         1,
       );
       assert.equal(
-        primaryColors.findAllByProps({
-          type: 'color',
-          'aria-label': `${copy.chooseColor}: ${copy[name]}`,
-        }).length,
+        primaryColors.findAll(
+          (node) =>
+            node.type === 'button' &&
+            node.props['data-slot'] === 'color-picker-trigger' &&
+            node.props['aria-label'] === `${copy.chooseColor}: ${copy[name]}`,
+        ).length,
         1,
       );
     }
@@ -805,20 +874,22 @@ test('visible text and background controls save independently and clear back to 
       'aria-label': copy.textAndBackground,
     });
     const picker = (name) =>
-      group.findByProps({
-        type: 'color',
-        'aria-label': `${copy.chooseColor}: ${copy[name]}`,
-      });
+      group.find(
+        (node) =>
+          node.type === 'button' &&
+          node.props['data-slot'] === 'color-picker-trigger' &&
+          node.props['aria-label'] === `${copy.chooseColor}: ${copy[name]}`,
+      );
     assert.deepEqual(editor.writes, []);
     assert.equal(view.field('foreground').props.placeholder, '#ddeeff');
     assert.equal(view.field('background').props.placeholder, '#101010');
-    view.event(picker('foreground'), { value: '#eeeeee' });
+    chooseColor(picker('foreground'), '#eeeeee');
     assert.deepEqual(editor.writes.at(-1).next, {
       ...user,
       foreground: '#eeeeee',
     });
     await settled();
-    view.event(picker('background'), { value: '#202020' });
+    chooseColor(picker('background'), '#202020');
     assert.deepEqual(editor.writes.at(-1).next, {
       ...user,
       foreground: '#eeeeee',
@@ -829,7 +900,7 @@ test('visible text and background controls save independently and clear back to 
     await tick(600);
     assert.equal(view.field('foreground').props['aria-invalid'], true);
     assert.equal(editor.writes.length, 2);
-    view.click(`${copy.clear}: ${copy.foreground}`);
+    view.click(`${copy.useInherited}: ${copy.foreground}`);
     await settled();
     assert.deepEqual(editor.writes.at(-1).next, {
       ...user,
@@ -844,28 +915,41 @@ test('visible text and background controls save independently and clear back to 
       ...user,
       background: '#1234',
     });
-    view.click(`${copy.clear}: ${copy.background}`);
+    view.click(`${copy.useInherited}: ${copy.background}`);
     await settled();
     assert.deepEqual(editor.writes.at(-1).next, user);
     assert.equal(view.field('background').props.placeholder, '#101010');
   }
 });
 
-test('colors offer native pickers and optional alpha hex; clearing one ANSI cell never pins the rest', async (tc) => {
+test('colors offer custom pickers and persist complete alpha hex; clearing one ANSI cell never pins the rest', async (tc) => {
   const editor = new Editor({
     base: { foreground: '#abc0', palette: palette({ 4: '#abc' }) },
     user: { palette: palette({ 1: '#ff00ff80', 2: '#abc' }) },
   });
   const view = mount(tc, editor);
   const pickers = view.tree.root.findAll(
-    (node) => node.type === 'input' && node.props.type === 'color',
+    (node) =>
+      node.type === 'button' &&
+      node.props['data-slot'] === 'color-picker-trigger',
   );
   assert.equal(pickers.length, 5 + 16);
+  const components = view.tree.root.findAllByType(ColorPicker);
+  assert.equal(components.length, 5 + 16);
+  for (const component of components) {
+    assert.equal(
+      component.findAllByType('input').length,
+      0,
+      'closed picker has no popup inputs',
+    );
+    assert.equal(component.props.disabled, false);
+  }
+  assert.equal(view.tree.root.findAllByProps({ type: 'color' }).length, 0);
   for (const key of [...colorFields, ...ansiNames])
     assert.equal(view.field(key).props.type, 'text');
   assert.equal(view.field('blue').props.value, '');
   assert.equal(view.field('blue').props.placeholder, '#abc');
-  view.click(`${en.clear}: 2 · ${en.green}`);
+  view.click(`${en.useInherited}: 2 · ${en.green}`);
   assert.deepEqual(editor.writes[0].next, {
     palette: palette({ 1: '#ff00ff80' }),
   });
@@ -876,13 +960,13 @@ test('colors offer native pickers and optional alpha hex; clearing one ANSI cell
       node.props['aria-label'] ===
       `${en.chooseColor}: ${en.selectionBackground}`,
   );
-  assert.equal(selected.props.value, '#aabbcc');
-  view.event(selected, { value: '#112233' });
-  assert.equal(view.field('selectionBackground').props.value, '#112233dd');
+  assert.equal(selected.props.value, '#aabbccdd');
+  chooseColor(selected, '#11223380');
+  assert.equal(view.field('selectionBackground').props.value, '#11223380');
   assert.equal(editor.writes.length, 2);
   await settled();
   assert.deepEqual(editor.writes[1].next, {
-    selectionBackground: '#112233dd',
+    selectionBackground: '#11223380',
     palette: palette({ 1: '#ff00ff80' }),
   });
   view.input('red', '');
@@ -893,18 +977,45 @@ test('colors offer native pickers and optional alpha hex; clearing one ANSI cell
     (node) =>
       node.props['aria-label'] === `${en.chooseColor}: ${en.foreground}`,
   );
-  assert.equal(transparent.props.value, '#aabbcc');
+  assert.equal(transparent.props.value, '#aabbcc00');
   const descriptions = transparent.props['aria-describedby']
     .split(' ')
     .map((id) => view.tree.root.findByProps({ id }).children.join(''));
   assert.ok(descriptions.includes(`${en.opacity}: 0%`));
-  view.event(transparent, { value: '#778899' });
+  chooseColor(transparent, '#77889900');
   assert.equal(view.field('foreground').props.value, '#77889900');
   await settled();
   assert.deepEqual(editor.writes[3].next, {
     foreground: '#77889900',
-    selectionBackground: '#112233dd',
+    selectionBackground: '#11223380',
   });
+});
+
+test('read-only custom picker triggers and callbacks cannot change any color', async (tc) => {
+  for (const copy of Object.values(preferenceMessages)) {
+    const user = { foreground: '#abc8', palette: palette({ 1: '#12345680' }) };
+    const editor = new Editor({ user, base: { background: '#101010' } });
+    const view = mount(tc, editor, undefined, (key) => copy[key]);
+    view.publish({ writable: false });
+    assert.equal(view.tree.root.findByType('fieldset').props.disabled, true);
+    const pickers = view.tree.root.findAll(
+      (node) =>
+        node.type === 'button' &&
+        node.props['data-slot'] === 'color-picker-trigger',
+    );
+    assert.equal(pickers.length, 21);
+    for (const trigger of pickers) {
+      const initial = trigger.props.value;
+      assert.equal(trigger.props.disabled, true);
+      assert.equal(colorPickerRoot(trigger).props.disabled, true);
+      chooseColor(trigger, '#abcdef80');
+      assert.equal(trigger.props.value, initial);
+    }
+    await settled();
+    assert.equal(view.field('foreground').props.value, '#abc8');
+    assert.equal(view.field('red').props.value, '#12345680');
+    assert.deepEqual(editor.writes, []);
+  }
 });
 
 test('dirty revisions retain the draft; reapplying merges individual fields/cells and saves them without clobbering unrelated changes', async (tc) => {
@@ -1184,7 +1295,7 @@ test('explicit clear restores focus; typing, successful autosave and external up
   });
   view.click(`${en.useInherited}: ${en.detectUrls}`);
   await settled();
-  view.click(`${en.clear}: ${en.foreground}`);
+  view.click(`${en.useInherited}: ${en.foreground}`);
   await settled();
   assert.deepEqual(focused, ['detectUrls', 'foreground']);
   view.input('fontSize', '20');
@@ -1321,6 +1432,201 @@ test('toggle controls stay on the right without repeated inheritance state label
   }
 });
 
+test('every single-setting reset is a compact transparent title action, never inside its label', (tc) => {
+  const user = {
+    fontFamily: '"User Mono"',
+    fontSize: 18,
+    lineHeight: 1.2,
+    scrollback: 1000,
+    renderer: 'canvas',
+    cursorStyle: 'bar',
+    predictiveEcho: true,
+    predictionStyle: 'dim',
+    latencyThreshold: 55,
+    ansiPreset: 'dsh',
+    boldBright: 'never',
+    fit: false,
+    detectUrls: false,
+    altIsMeta: false,
+    autoFocus: false,
+    searchIconAlwaysVisible: true,
+    paddingTop: 0,
+    paddingLeft: 12,
+    palette: palette({ 1: '#abc' }),
+    ...Object.fromEntries(colorFields.map((name) => [name, '#abcdef'])),
+  };
+  const names = Object.keys(user).filter(
+    (name) => !['paddingTop', 'paddingLeft', 'palette'].includes(name),
+  );
+  names.push('red');
+  for (const copy of Object.values(preferenceMessages)) {
+    const editor = new Editor({ user });
+    const view = mount(tc, editor, undefined, (key) => copy[key]);
+    for (const name of names) {
+      const input = view.field(name);
+      const label = view.tree.root.findByProps({ htmlFor: input.props.id });
+      const reset = view.button(
+        `${copy.useInherited}: ${name === 'red' ? '1 · ' : ''}${copy[name]}`,
+      );
+      assert.ok(reset, name);
+      assert.ok(
+        label.parent.findAll((node) => node === reset).length,
+        `${name}: action follows title`,
+      );
+      assert.equal(label.findAllByType('button').length, 0);
+      assert.ok(label.parent.props.className.includes('rio:flex-wrap'));
+      assert.equal(reset.props['data-slot'], 'field-reset');
+      assert.equal(reset.props.type, 'button');
+      assert.equal(
+        reset.findByType('span').children.join(''),
+        copy.useInherited,
+      );
+      assert.equal(reset.findByType('svg').props['aria-hidden'], 'true');
+      const classes = reset.props.className.split(' ');
+      for (const token of [
+        'rio:min-h-6',
+        'rio:border-0',
+        'rio:bg-transparent',
+        'rio:hover:bg-transparent',
+        'rio:focus-visible:outline-2',
+        'rio:text-settings-action',
+        'rio:focus-visible:text-foreground',
+        'rio:hover:text-foreground',
+      ])
+        assert.ok(classes.includes(token), `${name}: ${token}`);
+      assert.ok(!classes.includes('rio:min-h-10'));
+      assert.ok(!classes.includes('rio:hover:bg-accent'));
+      assert.ok(!classes.includes('rio:text-muted-foreground'));
+    }
+    const padding = view.tree.root
+      .findAllByType('fieldset')
+      .find((node) => node.props['aria-labelledby']);
+    const paddingLabel = view.tree.root.findByProps({
+      id: padding.props['aria-labelledby'],
+    });
+    assert.ok(
+      paddingLabel.parent.findAll(
+        (node) => node === view.button(`${copy.useInherited}: ${copy.padding}`),
+      ).length,
+    );
+    assert.equal(
+      view.button(`${copy.useInherited}: ${copy.paddingTop}`),
+      undefined,
+    );
+    assert.ok(
+      view
+        .button(copy.restore)
+        .props.className.split(' ')
+        .includes('rio:border'),
+    );
+    const resets = view.tree.root.findAll(
+      (node) =>
+        node.type === 'button' && node.props['data-slot'] === 'field-reset',
+    );
+    assert.equal(resets.length, names.length + 1);
+    view.publish({ writable: false });
+    for (const reset of resets) {
+      assert.equal(reset.props.disabled, true);
+      act(() => reset.props.onClick());
+    }
+    assert.deepEqual(editor.writes, []);
+    const inherited = mount(
+      tc,
+      new Editor({ base: user }),
+      undefined,
+      (key) => copy[key],
+    );
+    assert.equal(
+      inherited.tree.root.findAll(
+        (node) =>
+          node.type === 'button' && node.props['data-slot'] === 'field-reset',
+      ).length,
+      0,
+    );
+  }
+});
+
+test('text and numeric title resets clear only their field, recover invalid drafts and return focus', async (tc) => {
+  const focused = [];
+  const user = {
+    fontFamily: '"User Mono"',
+    fontSize: 22,
+    scrollback: 500,
+    foreground: '#abc',
+  };
+  const editor = new Editor({
+    user,
+    base: { fontFamily: '"Profile Mono"', scrollback: 200 },
+  });
+  const view = mount(tc, editor, {
+    createNodeMock: ({ props }) => ({ focus: () => focused.push(props.name) }),
+  });
+  view.click(`${en.useInherited}: ${en.fontFamily}`);
+  await settled();
+  assert.deepEqual(editor.snapshot.user, {
+    fontSize: 22,
+    scrollback: 500,
+    foreground: '#abc',
+  });
+  assert.equal(view.field('fontFamily').props.placeholder, '"Profile Mono"');
+  assert.equal(view.button(`${en.useInherited}: ${en.fontFamily}`), undefined);
+  view.input('scrollback', 'bad');
+  assert.equal(view.field('scrollback').props['aria-invalid'], true);
+  view.click(`${en.useInherited}: ${en.scrollback}`);
+  await settled();
+  assert.deepEqual(editor.snapshot.user, { fontSize: 22, foreground: '#abc' });
+  assert.equal(view.field('scrollback').props['aria-invalid'], undefined);
+  assert.equal(view.field('scrollback').props.placeholder, '200');
+  assert.deepEqual(focused, ['fontFamily', 'scrollback']);
+  assert.equal(view.status(), en.saved);
+});
+
+test('padding title reset clears all overridden sides through the existing save queue without touching other settings', async (tc) => {
+  const focused = [];
+  const user = {
+    paddingTop: 0,
+    paddingBottom: 8,
+    paddingLeft: 12,
+    foreground: '#abc',
+    fontSize: 18,
+  };
+  const base = {
+    paddingTop: 5,
+    paddingRight: 2,
+    paddingBottom: 7,
+    paddingLeft: 11,
+  };
+  const editor = new Editor({ user, base });
+  let finish;
+  editor.reply = (next, revision) =>
+    new Promise((resolve) => {
+      finish = () => {
+        editor.publish({
+          revision: revision + 1,
+          user: next,
+          value: { ...base, ...next },
+        });
+        resolve(true);
+      };
+    });
+  const view = mount(tc, editor, {
+    createNodeMock: ({ props }) => ({ focus: () => focused.push(props.name) }),
+  });
+  view.click(`${en.useInherited}: ${en.padding}`);
+  assert.equal(editor.writes.length, 1);
+  for (const name of Object.keys(base)) {
+    assert.equal(view.field(name).props.value, '');
+    assert.equal(view.field(name).props.placeholder, String(base[name]));
+  }
+  assert.deepEqual(focused, ['paddingTop']);
+  editor.reply = undefined;
+  await act(async () => finish());
+  await settled();
+  assert.deepEqual(editor.snapshot.user, { foreground: '#abc', fontSize: 18 });
+  assert.equal(view.button(`${en.useInherited}: ${en.padding}`), undefined);
+  assert.equal(view.status(), en.saved);
+});
+
 test('settings use roomy rows and host control radii without per-row dividers', async (tc) => {
   for (const copy of Object.values(preferenceMessages)) {
     const view = mount(
@@ -1385,20 +1691,33 @@ test('settings use roomy rows and host control radii without per-row dividers', 
         classes(node).some((token) => token.startsWith('rio:'))
       ) {
         assert.ok(classes(node).includes('rio:rounded-settings'));
-        if (node.props.type === 'color')
-          assert.ok(classes(node.parent).includes('rio:size-10'));
-        else assert.ok(classes(node).includes('rio:min-h-10'));
+        assert.ok(classes(node).includes('rio:min-h-10'));
       }
       if (node.type === 'button') {
-        assert.ok(classes(node).includes('rio:rounded-settings'));
-        assert.ok(!classes(node).includes('rio:rounded-md'));
-        assert.ok(
-          classes(node).includes(
-            node.props['data-slot'] === 'select-trigger'
-              ? 'rio:h-10'
-              : 'rio:min-h-10',
-          ),
-        );
+        if (node.props['data-slot'] === 'field-reset') {
+          for (const token of [
+            'rio:min-h-6',
+            'rio:border-0',
+            'rio:bg-transparent',
+            'rio:hover:bg-transparent',
+          ])
+            assert.ok(classes(node).includes(token));
+          assert.ok(!classes(node).includes('rio:min-h-10'));
+        } else if (node.props['data-slot'] === 'color-picker-trigger') {
+          assert.ok(classes(node).includes('rio:size-10'));
+          assert.ok(classes(node).includes('rio:rounded-settings'));
+          assert.ok(!classes(node).includes('rio:rounded-md'));
+        } else {
+          assert.ok(classes(node).includes('rio:rounded-settings'));
+          assert.ok(!classes(node).includes('rio:rounded-md'));
+          assert.ok(
+            classes(node).includes(
+              node.props['data-slot'] === 'select-trigger'
+                ? 'rio:h-10'
+                : 'rio:min-h-10',
+            ),
+          );
+        }
       }
       if (node.type === 'details' || node.type === 'summary')
         assert.ok(classes(node).includes('rio:rounded-settings'));
@@ -1461,7 +1780,34 @@ test('standalone scoped page has localized native and Select controls, associate
     'aria-label': en.previewColors,
   });
   assert.equal(preview.children.length, ansiNames.length);
+  const colorPreview = root.findByProps({ 'data-rio-preview': 'color' });
+  const colorSamples = new Set(
+    colorPreview.findAll(
+      (node) => typeof node.type === 'string' && node.props.style,
+    ),
+  );
+  const pickerSwatches = new Map(
+    root
+      .findAll(
+        (node) =>
+          node.type === 'button' &&
+          node.props['data-slot'] === 'color-picker-trigger',
+      )
+      .flatMap((trigger) =>
+        trigger
+          .findAll((node) => node.type === 'span' && node.props.style)
+          .map((swatch) => [swatch, trigger]),
+      ),
+  );
+  const themeColors = new Set([
+    'var(--dsw-alias-label-primary, CanvasText)',
+    'var(--dsw-alias-bg-base, Canvas)',
+    'currentColor',
+    'HighlightText',
+    'Highlight',
+  ]);
   const css = await compileUiStyles();
+  assert.match(css, /color:\s*var\(--dsw-alias-label-tertiary,\s*GrayText\)/i);
   assert.match(css, /@container\s*\(.*?30rem/);
   for (const node of [root, ...elements]) {
     if (node.type === 'p' && node.children[0] === en.fontSample)
@@ -1473,15 +1819,38 @@ test('standalone scoped page has localized native and Select controls, associate
         node.props.style.backgroundColor,
         /^#[\da-f]{6}([\da-f]{2})?$/i,
       );
+    } else if (colorSamples.has(node)) {
+      for (const [property, value] of Object.entries(node.props.style)) {
+        assert.ok(['color', 'backgroundColor'].includes(property));
+        assert.ok(
+          themeColors.has(value) || /^#[\da-f]{6}([\da-f]{2})?$/i.test(value),
+          value,
+        );
+      }
+    } else if (pickerSwatches.has(node)) {
+      assert.deepEqual(Object.keys(node.props.style), ['backgroundColor']);
+      assert.match(
+        node.props.style.backgroundColor,
+        /^#[\da-f]{6}([\da-f]{2})?$/i,
+      );
+      assert.equal(
+        node.props.style.backgroundColor,
+        pickerSwatches.get(node).props['data-color'],
+      );
     } else if (node.props.className?.includes('rio:')) {
       assert.equal(node.props.style, undefined);
     }
     assert.equal(node.props.autoFocus, undefined);
-    if (node.type === 'button')
-      assert.equal(
-        node.props['data-slot'],
-        node.props.role === 'combobox' ? 'select-trigger' : 'button',
-      );
+    if (node.type === 'button') {
+      if (node.props.role === 'combobox')
+        assert.equal(node.props['data-slot'], 'select-trigger');
+      else
+        assert.ok(
+          ['button', 'field-reset', 'color-picker-trigger'].includes(
+            node.props['data-slot'],
+          ),
+        );
+    }
     if (
       (node.type === 'input' || node.props.role === 'combobox') &&
       node.props.className?.includes('rio:') &&

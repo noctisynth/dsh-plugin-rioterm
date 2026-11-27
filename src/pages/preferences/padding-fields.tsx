@@ -5,6 +5,7 @@ import {
   paddingRange,
   preferenceDefaults,
 } from '../../preferences/values.ts';
+import { FieldResetAction } from './field-reset-action.tsx';
 import {
   controlClass,
   type FieldForm,
@@ -25,9 +26,25 @@ export function PaddingFields({ form }: { form: FieldForm }) {
   const { t } = form;
   const id = React.useId();
   const hintId = `${id}-hint`;
+  const inputRefs = React.useRef<
+    Partial<Record<(typeof paddingFields)[number], HTMLInputElement | null>>
+  >({});
+  const firstOverride = paddingFields.find(
+    (name) => form.fields[name] !== undefined,
+  );
   return (
     <SettingsRow
       label={<span id={id}>{t('padding')}</span>}
+      action={
+        <FieldResetAction
+          form={form}
+          names={paddingFields}
+          label={t('padding')}
+          onResetFocus={() => {
+            if (firstOverride) inputRefs.current[firstOverride]?.focus();
+          }}
+        />
+      }
       description={
         <span id={hintId}>
           {t('paddingHelp')} {t('integerRange')}: {paddingRange.join('–')} px.
@@ -47,6 +64,9 @@ export function PaddingFields({ form }: { form: FieldForm }) {
               form={form}
               id={`${id}-${name}`}
               name={name}
+              inputRef={(input) => {
+                inputRefs.current[name] = input;
+              }}
               placeholder={form.base[name] ?? String(preferenceDefaults[name])}
               inputMode="numeric"
               autoComplete="off"

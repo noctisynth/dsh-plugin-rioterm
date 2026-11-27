@@ -15,9 +15,10 @@
 
 ## UI 样式与组件
 
-- 共享 Button、Input、Alert 和 Select 采用 shadcn/ui 源码组件模式，放在 [components/ui](../../src/components/ui/)；页面只组合控件、选择变体，文案仍从页面词典取。组件使用 `cn` 合并含 `rio:` 前缀的 Tailwind 类；不要在页面复制按钮样式或用内联样式写静态布局。主题色和圆角在[局部样式源](../../src/styles/terminal.css)映射到宿主变量；字号用 Tailwind 的刻度，终端的字体、字号分别从 [DSH 主题适配](../../src/plugin/appearance.ts)继承，再叠加 [Rio 偏好](../../src/preferences/values.ts)。用户配置页位于插件详情，不在终端内容上叠加控件。
-- 每页使用自己的 `data-rio-ui` 根；脱离页面 DOM 的 Select Portal 必须在插件自有浮层上另设作用域根（`data-rio-ui="select"`），不能给宿主节点加作用域。在[构建步骤](../../build/ui-styles.ts)将工具类和 Tailwind 的回退声明限制在这个范围；不发布全局 Preflight、`.dark` 或 `:root` 规则。[样式安装](../../src/plugin/ui-styles.ts)随插件 effect 创建和清理，同一文档的标签共享一份，客户端不请求单独的 CSS 文件。不要把其他插件的 DOM 放进这个范围。
-- Rio 的屏幕和隐藏输入框可以使用这里的工具类；只有输入法候选窗的光标坐标、字体样张等依赖实时数据的值直接设置样式；样张只读经过校验的字体与字号，不接受 CSS 文本。修改原生组件、通知或配色后运行 [UI 契约测试](../../tests/terminal-ui.test.mjs)；React 单元测试不代替在 DSH 中切换主题和使用键盘的人工验收。
+- 共享 Button、Input、Alert、Select 和 Popover 采用 shadcn/ui 源码组件模式，放在 [components/ui](../../src/components/ui/)；页面只组合控件、选择变体，文案仍从页面词典取。组件使用 `cn` 合并含 `rio:` 前缀的 Tailwind 类；不要在页面复制按钮样式或用内联样式写静态布局。主题色和圆角在[局部样式源](../../src/styles/terminal.css)映射到宿主变量；字号用 Tailwind 的刻度，终端的字体、字号分别从 [DSH 主题适配](../../src/plugin/appearance.ts)继承，再叠加 [Rio 偏好](../../src/preferences/values.ts)。用户配置页位于插件详情，不在终端内容上叠加控件。
+- 每页使用自己的 `data-rio-ui` 根；脱离页面 DOM 的 Select / Popover Portal 必须在插件自有浮层上另设作用域根（`data-rio-ui="select"` / `"popover"`），不能给宿主节点加作用域。在[构建步骤](../../build/ui-styles.ts)将工具类和 Tailwind 的回退声明限制在这个范围；不发布全局 Preflight、`.dark` 或 `:root` 规则。[样式安装](../../src/plugin/ui-styles.ts)随插件 effect 创建和清理，同一文档的标签共享一份，客户端不请求单独的 CSS 文件。不要把其他插件的 DOM 放进这个范围。
+- 颜色使用自定义取色器，不依赖无法统一圆角的原生弹窗。Popover 接管内部焦点循环，并隔离 Tab 冒泡以免宿主 Modal 抢走 portal 焦点；Escape 交由 Radix 处理。打开色盘不写入默认色；图形、RGB 与吸管操作保留 alpha 字节，HEX 按完整色值解释。吸管仅在平台支持时由点击启动，关闭、只读或卸载后取消并忽略迟到结果。行为回归见[取色器 DOM 测试](../../tests/color-picker-ui.test.mjs)。
+- Rio 的屏幕和隐藏输入框可以使用这里的工具类；只有输入法候选窗的光标坐标、字体样张等依赖实时数据的值直接设置样式；字体和配色预览独立放在分组标题后、选项之前，不挂载终端；样张只读经过校验的字体、字号与十六进制颜色，缺省颜色使用固定的宿主／系统 token，不接受用户 CSS 文本。修改原生组件、通知或配色后运行 [UI 契约测试](../../tests/terminal-ui.test.mjs)；React 单元测试不代替在 DSH 中切换主题和使用键盘的人工验收。
 
 ## 如何守住这些边界
 

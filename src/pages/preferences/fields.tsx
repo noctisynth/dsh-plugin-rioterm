@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Button } from '../../components/ui/button.tsx';
 import {
   Select,
   SelectContent,
@@ -18,6 +17,7 @@ import {
   fieldsFrom,
   validateFields,
 } from './draft.ts';
+import { FieldResetAction } from './field-reset-action.tsx';
 import type { PreferenceTranslate } from './messages.ts';
 
 export interface FieldForm {
@@ -45,10 +45,12 @@ export const hintClass =
 export function SettingsSection({
   title,
   description,
+  preview,
   children,
 }: {
   title: string;
   description?: string;
+  preview?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const heading = React.useId();
@@ -63,6 +65,7 @@ export function SettingsSection({
         </h4>
         {description && <p className={hintClass}>{description}</p>}
       </header>
+      {preview}
       {children}
     </section>
   );
@@ -72,18 +75,21 @@ export function SettingsSection({
 // the nearest container (page or disclosure), never the browser viewport.
 export function SettingsRow({
   label,
+  action,
   description,
   children,
 }: {
   label: React.ReactNode;
+  action?: React.ReactNode;
   description?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="rio:grid rio:min-w-0 rio:items-center rio:gap-x-6 rio:gap-y-3 rio:py-3 rio:@min-[30rem]:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
       <div className="rio:grid rio:min-w-0 rio:gap-1 rio:wrap-anywhere">
-        <div className="rio:text-sm rio:font-normal rio:leading-[22px]">
+        <div className="rio:flex rio:min-w-0 rio:flex-wrap rio:items-center rio:gap-x-2 rio:gap-y-1 rio:text-sm rio:font-normal rio:leading-[22px]">
           {label}
+          {action}
         </div>
         {description && <div className={hintClass}>{description}</div>}
       </div>
@@ -131,17 +137,20 @@ export function Disclosure({
 function LabeledField({
   id,
   label,
+  action,
   hint,
   children,
 }: {
   id: string;
   label: string;
+  action?: React.ReactNode;
   hint?: string | undefined;
   children: React.ReactNode;
 }) {
   return (
     <SettingsRow
       label={<label htmlFor={id}>{label}</label>}
+      action={action}
       description={hint && <span id={`${id}-hint`}>{hint}</span>}
     >
       {children}
@@ -239,6 +248,7 @@ export function TextField({
   range?: readonly [number, number];
 }) {
   const id = React.useId();
+  const inputRef = React.useRef<HTMLInputElement>(null);
   const { base, t } = form;
   const invalid = form.invalid.includes(name);
   const decimal = name === 'lineHeight';
@@ -253,9 +263,22 @@ export function TextField({
     .filter(Boolean)
     .join(' ');
   return (
-    <LabeledField id={id} label={t(name)} hint={description}>
+    <LabeledField
+      id={id}
+      label={t(name)}
+      hint={description}
+      action={
+        <FieldResetAction
+          form={form}
+          names={[name]}
+          label={t(name)}
+          onResetFocus={() => inputRef.current?.focus()}
+        />
+      }
+    >
       {/* Text + inputMode keeps unfinished numbers visible; a number input turns some invalid keystrokes into the same empty string as an intentional unset. */}
       <PreferenceTextInput
+        inputRef={inputRef}
         form={form}
         id={id}
         name={name}
@@ -305,52 +328,48 @@ export function ChoiceField<K extends ChoiceName>({
     if (!form.writable) setOpen(false);
   }, [form.writable]);
   return (
-    <LabeledField id={id} label={t(name)} hint={hint}>
-      <div className="rio:grid rio:w-full rio:min-w-0 rio:justify-items-end rio:gap-2">
-        <Select
+    <LabeledField
+      id={id}
+      label={t(name)}
+      hint={hint}
+      action={
+        <FieldResetAction
+          form={form}
+          names={[name]}
+          label={t(name)}
+          onResetFocus={() => trigger.current?.focus()}
+        />
+      }
+    >
+      <Select
+        value={current ?? ''}
+        open={form.writable && open}
+        onOpenChange={(next) => setOpen(next && form.writable)}
+        disabled={!form.writable}
+        onValueChange={(value) => {
+          if (form.writable) form.change(name, value, 'immediate');
+        }}
+      >
+        <SelectTrigger
+          ref={trigger}
+          id={id}
+          name={name}
           value={current ?? ''}
-          open={form.writable && open}
-          onOpenChange={(next) => setOpen(next && form.writable)}
-          disabled={!form.writable}
-          onValueChange={(value) => {
-            if (form.writable) form.change(name, value, 'immediate');
-          }}
+          aria-label={t(name)}
+          aria-describedby={hint ? `${id}-hint` : undefined}
         >
-          <SelectTrigger
-            ref={trigger}
-            id={id}
-            name={name}
-            value={current ?? ''}
-            aria-label={t(name)}
-            aria-describedby={hint ? `${id}-hint` : undefined}
-          >
-            <SelectValue>
-              {current === undefined ? t('unknownValue') : t(current)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((choice) => (
-              <SelectItem value={choice} key={choice}>
-                {t(choice)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {fields[name] !== undefined && (
-          <Button
-            size="sm"
-            variant="outline"
-            className={settingsButtonClass}
-            aria-label={`${t('useInherited')}: ${t(name)}`}
-            onClick={() => {
-              form.change(name, '', 'immediate');
-              trigger.current?.focus();
-            }}
-          >
-            {t('useInherited')}
-          </Button>
-        )}
-      </div>
+          <SelectValue>
+            {current === undefined ? t('unknownValue') : t(current)}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((choice) => (
+            <SelectItem value={choice} key={choice}>
+              {t(choice)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </LabeledField>
   );
 }
@@ -383,23 +402,17 @@ export function ToggleField({
           {t(name)}
         </label>
       }
+      action={
+        <FieldResetAction
+          form={form}
+          names={[name]}
+          label={t(name)}
+          onResetFocus={() => inputRef.current?.focus()}
+        />
+      }
       description={hint && <span id={`${id}-hint`}>{hint}</span>}
     >
       <div className="rio:flex rio:min-h-10 rio:w-full rio:flex-wrap rio:items-center rio:justify-end rio:gap-3">
-        {value !== undefined && (
-          <Button
-            size="sm"
-            variant="outline"
-            className={settingsButtonClass}
-            aria-label={`${t('useInherited')}: ${t(name)}`}
-            onClick={() => {
-              form.change(name, '', 'immediate');
-              inputRef.current?.focus();
-            }}
-          >
-            {t('useInherited')}
-          </Button>
-        )}
         <input
           id={id}
           name={name}

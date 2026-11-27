@@ -10,7 +10,6 @@ import {
 import {
   type FieldForm,
   hintClass,
-  SettingsRow,
   SettingsSection,
   TextField,
   ToggleField,
@@ -31,7 +30,27 @@ export function FontLayoutFields({
   const invalid =
     form.invalid.includes('fontFamily') || form.invalid.includes('fontSize');
   return (
-    <SettingsSection title={t('fontLayout')} description={t('fontHelp')}>
+    <SettingsSection
+      title={t('fontLayout')}
+      description={t('fontHelp')}
+      preview={
+        <figure
+          data-rio-preview="font"
+          aria-label={t('fontPreview')}
+          className="rio:m-0 rio:grid rio:w-full rio:min-w-0 rio:gap-2 rio:py-2"
+        >
+          <figcaption className={hintClass}>{t('fontPreview')}</figcaption>
+          {/* This read-only sample never mounts a terminal or writes settings. */}
+          <p
+            style={{ fontFamily, fontSize }}
+            className="rio:box-border rio:m-0 rio:w-full rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:rounded-settings rio:bg-muted rio:px-4 rio:py-3 rio:leading-normal rio:wrap-anywhere"
+          >
+            {t('fontSample')}
+          </p>
+          {invalid && <p className={hintClass}>{t('fontFallback')}</p>}
+        </figure>
+      }
+    >
       <TextField
         form={form}
         name="fontFamily"
@@ -45,26 +64,6 @@ export function FontLayoutFields({
         range={fontSizeRange}
       />
       <PaddingFields form={form} />
-      <SettingsRow
-        label={t('fontPreview')}
-        description={
-          <>
-            {t('hostFont')}: <bdi>{hostFonts.fontFamily}</bdi> ·{' '}
-            <span className="rio:whitespace-nowrap">
-              {hostFonts.fontSize} px
-            </span>
-          </>
-        }
-      >
-        {/* Only the sample uses live font values. Never apply a draft to a real terminal. */}
-        <p
-          style={{ fontFamily, fontSize }}
-          className="rio:box-border rio:m-0 rio:min-h-10 rio:w-full rio:min-w-0 rio:max-w-full rio:overflow-hidden rio:rounded-settings rio:bg-muted rio:px-3 rio:py-2 rio:leading-normal rio:wrap-anywhere"
-        >
-          {t('fontSample')}
-        </p>
-        {invalid && <p className={hintClass}>{t('fontFallback')}</p>}
-      </SettingsRow>
       <TextField
         form={form}
         name="lineHeight"

@@ -21,10 +21,13 @@ const { PreferenceAutosave } = await jiti.import(
 const { Select, SelectContent, SelectItem, SelectValue } = await jiti.import(
   '../src/components/ui/select.tsx',
 );
+const { ColorPicker } = await jiti.import(
+  '../src/pages/preferences/color-picker.tsx',
+);
 const { act } = TestRenderer;
 
 // Keep real Radix components in no-document mode for configuration callbacks.
-// Browser menu/keyboard behavior is covered by the separate jsdom Select tests.
+// Browser menu/keyboard behavior is covered by the separate jsdom Select and ColorPicker tests.
 const originalGlobals = new Map(
   ['window', 'HTMLFormElement'].map((key) => [
     key,
@@ -44,6 +47,16 @@ after(() => {
     else delete globalThis[key];
   }
 });
+
+function colorPickerRoot(trigger) {
+  for (let node = trigger.parent; node; node = node.parent)
+    if (node.type === ColorPicker) return node;
+  assert.fail(`Missing ColorPicker root for ${trigger.props['aria-label']}`);
+}
+
+function chooseColor(trigger, fullHex) {
+  act(() => colorPickerRoot(trigger).props.onValueChange(fullHex));
+}
 
 function selectRoot(trigger) {
   for (let node = trigger.parent; node; node = node.parent)
@@ -65,6 +78,7 @@ function sourceText(tree, input) {
 function mount(tc, copy) {
   let tree;
   const changes = [];
+  const focused = [];
   function render(user, profile) {
     const fields = fieldsFrom(user);
     const form = {
@@ -79,7 +93,13 @@ function mount(tc, copy) {
     const el = React.createElement(ColorFields, { form });
     act(() => {
       if (tree) tree.update(el);
-      else tree = TestRenderer.create(el);
+      else
+        tree = TestRenderer.create(el, {
+          createNodeMock: (element) =>
+            element.type === 'input'
+              ? { focus: () => focused.push(element.props.name) }
+              : null,
+        });
     });
   }
   render({}, {});
@@ -89,17 +109,28 @@ function mount(tc, copy) {
   const description = (name, suffix) =>
     tree.root.findByProps({ id: `${field(name).props.id}-${suffix}` });
   const picker = (label) =>
-    tree.root.findByProps({
-      type: 'color',
-      'aria-label': `${copy.chooseColor}: ${label}`,
-    });
+    tree.root.find(
+      (node) =>
+        node.type === 'button' &&
+        node.props['data-slot'] === 'color-picker-trigger' &&
+        node.props['aria-label'] === `${copy.chooseColor}: ${label}`,
+    );
   const clears = () =>
     tree.root
       .findAllByType('button')
       .filter((node) =>
-        node.props['aria-label']?.startsWith(`${copy.clear}: `),
+        node.props['aria-label']?.startsWith(`${copy.useInherited}: `),
       );
-  return { render, field, source, description, picker, clears, changes };
+  return {
+    render,
+    field,
+    source,
+    description,
+    picker,
+    clears,
+    changes,
+    focused,
+  };
 }
 
 for (const [lang, copy] of Object.entries(preferenceMessages)) {
@@ -137,17 +168,29 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
         view.field(name).props['aria-describedby'].split(' ')[0],
       );
       if (defaultHex) {
-        assert.equal(picker.props.value, defaultHex);
+        const pickerHex = defaultHex.toLowerCase();
+        assert.equal(picker.props.value, pickerHex);
+        assert.equal(picker.props['data-color'], pickerHex);
+        assert.deepEqual(
+          picker
+            .findAllByType('span')
+            .filter((node) => node.props.style)
+            .map((node) => node.props.style),
+          [{ backgroundColor: pickerHex }],
+        );
         assert.ok(!picker.props['aria-describedby'].includes('opacity'));
       }
     }
-    // When the theme hex is unknown, the native picker's seed stays behind
-    // a neutral affordance. It never appears as a preference or a swatch.
+    // Unknown theme colors stay unknown: no fabricated black value or swatch.
     const picker = view.picker(copy.foreground);
-    assert.deepEqual(
-      picker.parent.findByProps({ 'aria-hidden': 'true' }).children,
-      ['+'],
-    );
+    assert.equal(picker.type, 'button');
+    assert.equal(picker.props.value, '');
+    assert.equal(picker.props['data-color'], undefined);
+    assert.equal(colorPickerRoot(picker).props.value, undefined);
+    assert.deepEqual(picker.findByProps({ 'aria-hidden': 'true' }).children, [
+      '+',
+    ]);
+    assert.equal(picker.findAll((node) => node.props.style).length, 0);
     assert.match(view.source('cursor'), /currentColor/);
     assert.match(view.source('selectionForeground'), /HighlightText/);
     assert.match(view.source('selectionBackground'), /Highlight(?!Text)/);
@@ -197,6 +240,26 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       `${afterClear}${copy.colorRioPalette} ${defaultTheme.brightWhite}`,
     );
     assert.equal(view.clears().length, 4);
+    for (const name of ['foreground', 'cursor', 'red', 'brightWhite']) {
+      const label = ansiNames.includes(name)
+        ? `${ansiNames.indexOf(name)} · ${copy[name]}`
+        : copy[name];
+      const reset = view
+        .clears()
+        .find(
+          (node) =>
+            node.props['aria-label'] === `${copy.useInherited}: ${label}`,
+        );
+      assert.ok(reset);
+      assert.equal(reset.props['data-slot'], 'field-reset');
+      let heading = reset.parent;
+      while (heading.type !== 'div') heading = heading.parent;
+      const title = heading.findByType('label');
+      assert.equal(title.props.htmlFor, view.field(name).props.id);
+      assert.equal(title.children.join(''), label);
+      assert.equal(title.findAllByType('button').length, 0);
+      assert.equal(heading.findAllByType('input').length, 0);
+    }
 
     // A new profile may supply a cursor independent of the effective text.
     view.render(local, { ...profile, cursor: '#f09' });
@@ -208,10 +271,12 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
     const clear = view
       .clears()
       .find(
-        (node) => node.props['aria-label'] === `${copy.clear}: 1 · ${copy.red}`,
+        (node) =>
+          node.props['aria-label'] === `${copy.useInherited}: 1 · ${copy.red}`,
       );
     act(() => clear.props.onClick());
     assert.deepEqual(view.changes, [['red', '', 'immediate']]);
+    assert.deepEqual(view.focused, ['red']);
     view.render({ ...local, palette: palette({ 15: '#fff' }) }, profile);
     assert.equal(view.field('red').props.value, '');
     assert.equal(view.field('red').props.placeholder, '#222');
@@ -222,7 +287,7 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
     assert.equal(view.clears().length, 3);
   });
 
-  test(`${lang}: a blank cursor follows text from draft or profile, preserving alpha only on an explicit pick`, (tc) => {
+  test(`${lang}: a blank cursor follows text from draft or profile, persisting full RGBA only on an explicit custom pick`, (tc) => {
     const view = mount(tc, copy);
     view.render({ foreground: '#abc0' }, { foreground: '#def8' });
     assert.equal(view.field('cursor').props.value, '');
@@ -230,7 +295,7 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       view.source('cursor'),
       `${copy.inherited}: ${copy.colorCurrentText} #abc0`,
     );
-    assert.equal(view.picker(copy.cursor).props.value, '#aabbcc');
+    assert.equal(view.picker(copy.cursor).props.value, '#aabbcc00');
     const opacity = view.description('cursor', 'opacity');
     assert.equal(opacity.children.join(''), `${copy.opacity}: 0%`);
     assert.ok(!opacity.props.className.includes('sr-only'));
@@ -246,15 +311,21 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       `${copy.inherited}: ${copy.colorCurrentText} #def8`,
     );
     const picker = view.picker(copy.cursor);
-    assert.equal(picker.props.value, '#ddeeff');
+    assert.equal(picker.props.value, '#ddeeff88');
     assert.deepEqual(view.changes, []);
-    act(() => picker.props.onChange({ currentTarget: { value: '#123456' } }));
-    assert.deepEqual(view.changes, [['cursor', '#12345688', 'immediate']]);
+    chooseColor(picker, '#12345680');
+    assert.deepEqual(view.changes, [['cursor', '#12345680', 'immediate']]);
     view.render({ cursor: '#bad-input' }, { cursor: '#abcd' });
     assert.ok(
       !view.picker(copy.cursor).props['aria-describedby'].includes('opacity'),
     );
     assert.equal(view.field('cursor').props['aria-invalid'], true);
+    assert.equal(view.picker(copy.cursor).props.value, '');
+    assert.equal(view.picker(copy.cursor).props['data-color'], undefined);
+    assert.equal(
+      view.picker(copy.cursor).findAll((node) => node.props.style).length,
+      0,
+    );
     const error = view.description('cursor', 'error');
     assert.equal(error.children.join(''), copy.invalidColor);
     assert.ok(!error.props.className.includes('sr-only'));
@@ -428,6 +499,15 @@ for (const [lang, copy] of Object.entries(preferenceMessages)) {
       base: {},
     });
     assert.equal(field('foreground').props.value, '#abc');
+    assert.equal(
+      tree.root.find(
+        (node) =>
+          node.type === 'button' &&
+          node.props['aria-label'] ===
+            `${copy.useInherited}: ${copy.foreground}`,
+      ).props.disabled,
+      true,
+    );
     assert.equal(
       source('foreground'),
       `${copy.colorOverride} · ${copy.colorSourceUnavailable}`,
