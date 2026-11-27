@@ -9,7 +9,7 @@
 | 私有终端归属、恢复、关闭、保活、输入与输出帧          | [窗口会话注册表](../../src/session/registry.ts)、[绑定存储](../../src/session/bindings.ts)、[有序帧流](../../src/session/wire.ts)                                                                    | React、Rio、DOM 渲染；持久化格式改变需要迁移，不是文件改名            |
 | 字体与配色如何渲染、字符网格、键盘/输入法、选择与滚轮 | [Rio 屏幕](../../src/rio/screen.ts)、[无 DOM 的终端核心](../../src/rio/terminal.ts)                                                                                                                  | 侧栏、会话存储、控制宿主 PTY 的逻辑                                   |
 | 设置的校验、继承、持久化与编辑                        | [偏好模型](../../src/preferences/values.ts)、[宿主 schema](../../src/host/preferences.ts)、[编辑器适配](../../src/plugin/preferences.ts)、[设置页](../../src/pages/preferences/preferences-page.tsx) | 不能把宿主字体缓存成 Rio 覆盖，也不通过重连应用设置                   |
-| WASM 文件的认证与交付                                 | [宿主资源入口](../../src/index.ts)、[资源约定](../../docs/host-resource.md)                                                                                                                          | 浏览器组件、外部 CDN 或从用户输入拼接文件路径                         |
+| WASM 文件的认证与交付                                 | [宿主资源入口](../../src/index.ts)、[资源约定](host-resource.md)                                                                                                                                     | 浏览器组件、外部 CDN 或从用户输入拼接文件路径                         |
 
 [共享契约](../../src/terminal/contracts.ts)是接口，不是另一个实现。页面可以挂载、取消自己的视图，不能直接关闭进程。一个窗口的注册表负责标签清单和关闭操作。Rio 只提议新尺寸；确认后的尺寸由会话和输出按顺序交给屏幕，不能为了让窗口“合身”先改网格。重连不签发新的启动许可，隐藏已挂载的页面也不等于结束 shell。[屏幕连接](../../src/session/attachment.ts)负责在原面板接回已知的终端 ID：传输重试交给 DSH Gateway，每次新连接都要重新确认保活与可见性，旧连接的按键和待确认输入不跨连接重发。已知只读的窗口不得自动接管。
 
