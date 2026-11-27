@@ -85,4 +85,4 @@ semifold status
 
 目标发布渠道为 npm。README 随 npm 包交付，必须以该版本已经发布为前提，直接说明通过包名安装；上线前状态、配置差距与发布操作只记录在 `.agents`，不写入用户 README。
 
-当前包采用 MIT 许可证，[发布配置](../../.changes/config.toml) 已启用公开 npm 发布（`publish = true`、`--provenance --access public`）与 GitHub Release，并在 [CI 工作流](../../.github/workflows/semifold-ci.yaml) 中配置了 Node 24 与 pnpm 发布环境。GitHub 源码归档不含被忽略的 `lib/`，不能代替经过检查的 npm 包。GitHub 自动化需要允许 Actions 创建 PR，并允许发布任务写入仓库内容；发布待办见[发布待办](../TODO.md)。文档按发布后的用户视角编写，不代表已实际执行发布。
+当前包采用 MIT 许可证，[发布配置](../../.changes/config.toml) 已启用公开 npm 发布（`publish = true`、`--provenance --access public`）与 GitHub Release，并在 [CI 工作流](../../.github/workflows/semifold-ci.yaml) 中配置了 Node 24、pnpm 及 npm OIDC 可信发布（绑定 `semifold-ci.yaml`，无需静态 `NPM_TOKEN`）。GitHub 源码归档不含被忽略的 `lib/`，不能代替经过检查的 npm 包。GitHub 自动化需要允许 Actions 创建 PR，并允许发布任务写入仓库内容；发布待办见[发布待办](../TODO.md)。文档按发布后的用户视角编写，不代表已实际执行发布。
