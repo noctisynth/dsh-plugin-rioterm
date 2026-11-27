@@ -98,4 +98,4 @@ dsh plugin --profile web add dsh-plugin-rioterm
 
 反馈时请提供 DSH 与插件版本、操作系统、复现步骤，以及界面中的错误详情。分享截图或日志前，请移除命令输出中的凭据和私人信息。请到[项目 Issues](https://github.com/noctisynth/dsh-plugin-rioterm/issues) 提交问题；源码与版本记录见[项目仓库](https://github.com/noctisynth/dsh-plugin-rioterm)。
 
-本插件是独立的 DSH 扩展，使用 Rio 终端引擎，不代表 Rio 项目的官方背书。第三方组件的许可与署名见随包提供的 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)；这些声明不代表本插件自身的许可证。
+本插件是独立的 DSH 扩展，使用 Rio 终端引擎，不代表 Rio 项目的官方背书。本插件采用 [MIT 许可证](LICENSE)；第三方组件的许可与署名见随包提供的 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。

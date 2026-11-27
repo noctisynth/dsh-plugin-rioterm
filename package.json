@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-rioterm",
   "version": "0.0.0",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.3.1",
   "description": "Interactive Rio WebAssembly terminal for DeepSeek Harness",
@@ -33,6 +33,7 @@
     "locale",
     "icon.svg",
     "docs/licenses",
+    "LICENSE",
     "README.md",
     "THIRD-PARTY-NOTICES.txt"
   ],

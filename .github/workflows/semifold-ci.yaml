@@ -18,6 +18,7 @@ jobs:
     name: Version or Publish
     needs: quality
     permissions:
+      id-token: write
       contents: write
       pull-requests: write
     runs-on: ubuntu-latest
@@ -28,6 +29,13 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6; reads packageManager
+      - run: pnpm install --frozen-lockfile
       - uses: noctisynth/setup-semifold@9dc3b2e2f25d5db332322b29c3d3436c857ca1d9
         with:
           version: "0.3.4"
@@ -37,3 +45,4 @@ jobs:
         run: semifold ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

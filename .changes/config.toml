@@ -31,8 +31,14 @@ changeset-template = """
 [packages.dsh-plugin-rioterm]
 path = "."
 resolver = "nodejs"
-publish = false
+publish = true
 github-release = true
 
-[resolver.nodejs]
-publish = []
+[resolver.nodejs.pre-check]
+type = "http"
+url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+retry = [2, 5, 15, 30]
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public", "--tag", "latest"]
