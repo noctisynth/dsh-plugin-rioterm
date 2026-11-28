@@ -1,101 +1,103 @@
-# Rio 终端 · DeepSeek Harness
+# Rio Terminal · DeepSeek Harness
 
-在 DeepSeek Harness（DSH）右侧栏使用交互式终端，从当前会话的工作目录启动 shell。Rio 终端与 DSH 内置终端并存，不接管 Agent 的终端。
+English | [中文](README.zh.md)
 
-- 支持键盘输入、粘贴、文本选择、滚轮和终端输出查找。
-- 切换标签或刷新页面后，可恢复仍在运行的原终端。
-- 支持字体、配色、留白、DOM / Canvas 渲染器等设置。
-- 终端引擎随插件提供，运行时不从 CDN 下载。
+Use an interactive terminal in the right sidebar of DeepSeek Harness (DSH), launching a shell in the current session's working directory. Rio terminal runs alongside DSH's built-in terminal and does not take over the Agent's terminal.
 
-> **执行权限：** 这是由你直接操作的用户终端。命令在运行 DSH 的机器上，以 DSH 所在系统用户的权限执行，不经过 Agent 的审批流程。连接远程 DSH 时，命令不是在浏览器所在的电脑上运行。
+- Supports keyboard input, paste, text selection, scrolling, and searching terminal output.
+- Restores the still-running terminal after switching tabs or refreshing the page.
+- Configurable fonts, colors, padding, and DOM / Canvas renderers.
+- Bundles the terminal engine with the plugin—nothing is downloaded from a CDN at runtime.
 
-## 安装
+> **Execution permissions:** This is a user terminal operated directly by you. Commands run on the machine hosting DSH with the privileges of the system user running DSH, bypassing the Agent's approval flow. When connected to a remote DSH instance, commands do not run on the computer running your browser.
 
-需要能够正常使用终端的 DSH，以及支持 WebAssembly 的浏览器或 DSH 桌面客户端。页面的安全策略必须允许运行随插件提供的 WebAssembly。
+## Installation
 
-在 DSH 中打开 **插件 → 添加插件**，输入 `dsh-plugin-rioterm` 安装；web profile 也可使用命令：
+Requires a DSH instance with working terminal support and a browser or DSH desktop client that supports WebAssembly. The page's security policy must allow running the WebAssembly module bundled with the plugin.
+
+In DSH, open **Plugins → Add plugin** and enter `dsh-plugin-rioterm` to install. For the `web` profile, you can also run:
 
 ```sh
 dsh plugin --profile web add dsh-plugin-rioterm
 ```
 
-按安装提示完成启用或重启，然后在右侧栏选择 **＋ → Rio 终端**。
+Follow the installation prompt to enable or restart DSH, then select **+ → Rio terminal** in the right sidebar.
 
-## 开始使用
+## Getting Started
 
-打开 Rio 标签后，等待 shell 提示符出现，即可输入命令。如果显示「启动 shell」，点击按钮开始。
+After opening a Rio tab, wait for the shell prompt to appear and start typing commands. If **Start shell** is shown, click it to begin.
 
-- **切换标签或刷新页面：** 在 DSH 后台进程仍运行、原 shell 未退出时，恢复同一个终端；默认切回标签后自动聚焦。
-- **调整大小：** 默认自动适配面板尺寸。拉高面板时，原有滚动历史可能重新出现在顶部，不会为固定提示符的位置删除历史。
-- **关闭标签：** 请求结束该标签对应的 shell；仅收起侧栏不会结束它。
-- **打开链接：** 按住 `⌘`（macOS）或 `Ctrl` 点击识别出的链接，确认目标地址后打开。普通单击不会打开链接。
+- **Switching tabs or refreshing the page:** Restores the same terminal as long as the DSH backend is still running and the original shell has not exited. By default, switching back to a tab automatically focuses it.
+- **Resizing:** Automatically fits the panel size by default. When making the panel taller, earlier scrollback history may reappear at the top—history is not discarded to pin the prompt's position.
+- **Closing a tab:** Requests termination of that tab's shell; merely collapsing the sidebar does not terminate it.
+- **Opening links:** Hold `⌘` (macOS) or `Ctrl` and click a detected link, then confirm the target URL to open it. A plain click does not open links.
 
-支持 Vim 等全屏终端程序的键盘操作；目前不向终端应用转发鼠标点击或拖动。
+Keyboard controls for full-screen terminal applications such as Vim are supported. Mouse clicks and drags are not currently forwarded to terminal applications.
 
-### 查找终端输出
+### Finding Terminal Output
 
-在终端内按 `⌘F`（macOS）或 `Ctrl+Shift+F` 打开查找。普通 `Ctrl+F` 保留给 shell 或终端应用。
+Press `⌘F` (macOS) or `Ctrl+Shift+F` inside the terminal to open find. Plain `Ctrl+F` remains reserved for the shell or terminal applications.
 
-| 操作         | 快捷键        |
-| ------------ | ------------- |
-| 下一个匹配项 | `Enter`       |
-| 上一个匹配项 | `Shift+Enter` |
-| 关闭查找     | `Esc`         |
+| Action         | Shortcut      |
+| -------------- | ------------- |
+| Next match     | `Enter`       |
+| Previous match | `Shift+Enter` |
+| Close find     | `Esc`         |
 
-查找区分大小写，按字面匹配当前标签的屏幕和仍保留的滚动历史，不支持正则表达式。匹配项首尾循环；`2 / 5` 表示当前为第 2 处，超过 1,000 处时显示 `1000+`。查找不会搜索其他标签或已丢弃的历史，也不会向 shell 发送搜索词。
+Search is case-sensitive and performs a literal match against the current tab's screen and retained scrollback history (regular expressions are not supported). Matches wrap around from end to start; `2 / 5` indicates the 2nd match out of 5, and counts above 1,000 display as `1000+`. Find does not search other tabs or discarded history, and never sends your query to the shell.
 
-搜索图标默认隐藏。如需用鼠标打开查找，在 **Rio 终端设置 → 交互 → 搜索图标常驻显示** 中开启开关；这不会改变快捷键。
+The search icon is hidden by default. To open find with a mouse, turn on **Rio terminal settings → Interaction → Always show the search icon**; this does not change the keyboard shortcuts.
 
-### 断线和只读模式
+### Disconnection and Read-Only Mode
 
-断线时保留原画面，但暂时不能输入。连接恢复后，原本可写且当前可见的标签会尝试连接原 shell；隐藏标签在再次显示时恢复。也可以点击「重新连接」，不会重新启动 shell，也不会重发断线前未确认的输入。
+When disconnected, the existing screen output remains visible, but input is temporarily disabled. Once the connection recovers, a visible tab that was previously writable attempts to reconnect to the original shell; hidden tabs reconnect when shown again. You can also click **Reconnect**—this does not start a new shell or resend unconfirmed input from before the disconnect.
 
-同一终端被其他窗口控制时，当前窗口只能查看输出和查找。需要输入时，点击「取得输入控制权」；只读窗口断线后不会自动接管。
+When another window controls the same terminal, the current window can only view output and search. To type, click **Take input control**. Read-only windows do not automatically take over after a disconnect.
 
-如果 DSH 后台已重启、shell 已退出或原进程无法恢复，请手动打开新终端。插件不会静默创建替代 shell。
+If the DSH backend has restarted, the shell has exited, or the original process can no longer be recovered, open a new terminal manually. The plugin never silently creates a replacement shell.
 
-## 设置
+## Settings
 
-打开 **插件 → 已安装插件 → Rio 终端**。设置只影响 Rio 标签，不改变 DSH 内置终端。
+Open **Plugins → Installed plugins → Rio terminal**. Settings apply only to Rio tabs and do not affect DSH's built-in terminal.
 
-下拉选项、开关和取色器立即自动保存；字体、数值和颜色文本在停止输入约 600 毫秒或离开输入框时保存。无效输入不会保存。字体与配色分组提供即时预览，无需先打开终端。
+Dropdowns, toggles, and color pickers save automatically and immediately; font, numeric, and color text fields save roughly 600 ms after you stop typing or when the field loses focus. Invalid values are not saved. The font and color sections provide live previews without needing to open a terminal first.
 
-修改过的选项可单独「恢复默认」，重新跟随默认值；页头「恢复默认设置」会要求确认。改变显示设置不会新建 shell 或重新连接终端。
+Modified options can be individually reverted with **Reset to default** to inherit their default values again; **Restore defaults…** in the header asks for confirmation. Changing display settings does not start a new shell or reconnect open terminals.
 
-| 设置           | 说明                                                                                                                              |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 字体与字号     | 分别继承 **DSH 设置 → 通用 → 更多字体设置** 的终端配置。只改字号不会锁定字体；清空某项后重新继承。使用本机字体，不下载字体。      |
-| 配色           | 文字、背景、光标、选区与 ANSI 16 色可独立覆盖；恢复一项不会影响其他颜色。                                                         |
-| 渲染器         | 默认 DOM，可切换 Canvas。Canvas 支持光标形状与预测反馈；预测默认关闭，开启后仅用占位符提示未确认的输入，字符仍以 shell 回显为准。 |
-| 终端留白       | 上、右、下、左可分别设为 0–64 px，默认 16 / 8 / 8 / 8；全部设为 0 可贴边显示。                                                    |
-| 自动聚焦与尺寸 | 默认打开或切回标签时自动聚焦，并适配可用空间。可分别关闭；关闭自动适配后保留原终端行列数。                                        |
-| 键盘与链接     | 可设置 Alt 作为 Meta，并开关纯文本 URL 识别。                                                                                     |
-| 滚动历史       | 留空使用 DSH 提供的上限，`0` 表示不保留。新上限在下次创建或恢复屏幕时生效，不立即清除现有历史。                                   |
+| Setting             | Description                                                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Font & size         | Independently inherit the terminal settings from **DSH Settings → General → More font settings**. Changing only the size does not lock the font family; clearing a field resumes inheritance. Uses local fonts only and never downloads fonts. |
+| Colors              | Text, background, cursor, selection, and the 16 ANSI colors can each be overridden independently; resetting one does not affect the others.                                                                                            |
+| Renderer            | Defaults to DOM, with Canvas available. Canvas supports cursor shape and predictive local echo; prediction is off by default and only shows placeholders for unconfirmed input—actual characters still come from shell output.         |
+| Terminal padding    | Top, right, bottom, and left can each be set from 0 to 64 px (defaults: 16 / 8 / 8 / 8); set all to 0 for edge-to-edge display.                                                                                                       |
+| Auto-focus & sizing | Automatically focuses the terminal when opening or switching back to its tab and fits available space by default. Both can be turned off independently; turning off auto-fit preserves the host grid dimensions.                       |
+| Keyboard & links    | Configure **Use Alt as Meta** and toggle plain-text URL recognition.                                                                                                                                                                   |
+| Scrollback history  | Leave blank to inherit the limit provided by DSH; `0` keeps no history. A new limit takes effect the next time a screen is created or restored and does not immediately clear existing history.                                        |
 
-### 默认配色与粗体
+### Default Colors and Bold Text
 
-个人设置优先于 DSH 配置中为 Rio 预设的值；没有覆盖时，按下表继承：
+Personal overrides take precedence over Rio presets configured in the DSH profile; without overrides, colors inherit as follows:
 
-| 颜色               | 默认来源                                           |
-| ------------------ | -------------------------------------------------- |
-| 文字、背景         | DSH 界面的主文字色和基础背景色，随主题变化。       |
-| 光标               | Rio 当前使用的文字色。                             |
-| 选中文字、选区背景 | 浏览器提供的系统选区色。                           |
-| ANSI 16 色         | 默认「Rio 默认」调色板，也可选择「DSH 内置终端」。 |
+| Color                               | Default source                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| Text, background                    | DSH interface primary text and base background colors, adapting to theme changes.     |
+| Cursor                              | The text color currently used by Rio.                                                 |
+| Selected text, selection background | System selection colors provided by the browser.                                      |
+| 16 ANSI colors                      | Defaults to the **Rio default** palette; **DSH built-in terminal** is also available. |
 
-想让 `ls` 的粗体目录名更接近内置终端，可将「ANSI 调色板」设为「DSH 内置终端」，并保留「粗体使用亮色 → 跟随调色板」。使用「Rio 默认」时，默认只加粗，不换色；也可选择「始终开启」或「始终关闭」。这只影响前景的基础 8 个 ANSI 色，不改变背景或真彩色，两种终端的最终观感不保证完全一致。
+To make bold directory names in `ls` look closer to the built-in terminal, set **ANSI palette** to **DSH built-in terminal** and keep **Use bright colors for bold text → Follow palette**. With **Rio default**, bold text is weighted without shifting color by default; you can also choose **Always on** or **Always off**. This only affects the 8 base ANSI foreground colors, not backgrounds or truecolor, and visual parity between the two terminals is not guaranteed.
 
-文字色和背景色可在「终端配色」顶部修改；光标与选区在「自定义光标与选区」中。取色器支持 RGB、HEX 和透明度，平台支持时还可从屏幕取色。HEX 的三／六位格式表示不透明，四／八位包含透明度；按 `Esc` 丢弃尚未提交的 HEX 文本，不撤销已经保存的选择。
+Text and background colors can be edited at the top of **Terminal colors**; cursor and selection colors are under **Customize cursor and selection**. The color picker supports RGB, HEX, and opacity, plus screen color picking where supported by the platform. 3- and 6-digit HEX values are opaque, while 4- and 8-digit values include opacity. Press `Esc` to discard uncommitted HEX text without undoing an already saved selection.
 
-## 常见问题
+## Troubleshooting
 
-- **无法加载终端引擎：** 查看错误详情，检查连接后点击「重试」。如果提示无法启动引擎，解决错误后重新加载整个 DSH 窗口，而不只是终端标签。不要为此关闭页面安全策略。
-- **终端显示但不能输入：** 检查是否断线或处于只读模式，按提示重新连接或取得输入控制权。
-- **刷新后找不到原终端：** 恢复需要原 DSH 后台与 shell 仍存活。后台重启后请手动新建。
-- **查找快捷键被占用：** 开启「搜索图标常驻显示」，再点击放大镜。
+- **Unable to load the terminal engine:** View the technical details, check your connection, and click **Retry**. If the message says the engine could not be started, fix the underlying error and reload the entire DSH window—not just the terminal tab. Do not disable the page's security policy to work around this.
+- **Terminal is visible but ignores input:** Check whether it is disconnected or in read-only mode, and follow the prompt to reconnect or take input control.
+- **Original terminal is missing after refresh:** Recovery requires the original DSH backend and shell to still be alive. After a backend restart, open a new terminal manually.
+- **Find shortcut conflicts with another binding:** Enable **Always show the search icon** and click the magnifying glass icon instead.
 
-## 问题反馈与第三方组件
+## Feedback & Third-Party Components
 
-反馈时请提供 DSH 与插件版本、操作系统、复现步骤，以及界面中的错误详情。分享截图或日志前，请移除命令输出中的凭据和私人信息。请到[项目 Issues](https://github.com/noctisynth/dsh-plugin-rioterm/issues) 提交问题；源码与版本记录见[项目仓库](https://github.com/noctisynth/dsh-plugin-rioterm)。
+When reporting an issue, please include your DSH and plugin versions, operating system, steps to reproduce, and any error details shown in the UI. Remove credentials and private information from terminal output before sharing screenshots or logs. Report issues in [GitHub Issues](https://github.com/noctisynth/dsh-plugin-rioterm/issues); source code and release history are in the [project repository](https://github.com/noctisynth/dsh-plugin-rioterm).
 
-本插件是独立的 DSH 扩展，使用 Rio 终端引擎，不代表 Rio 项目的官方背书。本插件采用 [MIT 许可证](LICENSE)；第三方组件的许可与署名见随包提供的 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
+This plugin is an independent DSH extension powered by the Rio terminal engine and does not imply official endorsement by the Rio project. Licensed under the [MIT License](LICENSE); licenses and notices for third-party components are provided in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
