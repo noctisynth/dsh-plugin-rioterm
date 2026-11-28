@@ -1,5 +1,14 @@
 # Changelog
 
+<!-- semifold:release version=0.1.1 -->
+## v0.1.1
+
+### Chores
+
+- [`fde44b9`](https://github.com/noctisynth/dsh-plugin-rioterm/commit/fde44b9f42fe6738ea8f1060710f9ff91f6df358): 将中文 README 重命名为 README.zh.md，并提供英文 README.md 作为默认说明文档。
+- [`bb6ab45`](https://github.com/noctisynth/dsh-plugin-rioterm/commit/bb6ab45ecc75df8f5f8cb2ad857005716432d760): 补充 package.json 中的 author 与 engines.dsh 元数据，以支持 DSH 插件市场索引与兼容性校验。
+<!-- semifold:release:end -->
+
 <!-- semifold:release version=0.1.0 -->
 ## v0.1.0
 
